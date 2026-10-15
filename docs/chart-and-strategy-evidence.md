@@ -14,6 +14,8 @@ Hover, tap, or previous/next candle controls show exact OHLC/base volume and thr
 
 Bollinger uses population standard deviation. Session VWAP uses reported quote/base volume and resets at UTC midnight. Donchian excludes the current candle. EMA/RSI/MACD/ATR use the production causal indicator functions. Chart history normally contains 499 closed candles from a 500-kline request. Research normally uses 259 closed candles from a 260-kline request. Different windows, parameters and reference times can produce different indicator values; the chart does not imply that research repaints.
 
+Native [Lightweight Charts percentage mode](https://tradingview.github.io/lightweight-charts/docs/api/enumerations/PriceScaleMode) references the first visible value, which becomes 0%; panning and zooming can change that reference. It is not the selected candle's body percentage. Price/log modes are appropriate for comparing absolute price levels and overlays.
+
 ## Four independent research horizons
 
 `cx-spot-3` adds 15M without changing the numerical gates of the older three horizons. 15M scores and decisions use their own closed 15-minute candle and 1H/4H confirmation, with all context cut off at the decision close. A failed 15M download does not suppress otherwise valid 1H/4H/1D research. All feeds are downloaded once per asset and reused.

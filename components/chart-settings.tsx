@@ -41,7 +41,7 @@ export function ChartSettingsPanel({ value, onApply, onClose }: { value: ChartSe
       </fieldset>
       <fieldset className="chart-appearance"><legend>Tampilan</legend>
         <label>Jenis chart<select value={draft.style} onChange={e => set("style", e.target.value as ChartSettings["style"])}><option value="candles">Candlestick</option><option value="line">Line</option><option value="area">Area</option></select></label>
-        <label>Skala harga<select value={draft.scale} onChange={e => set("scale", e.target.value as ChartSettings["scale"])}><option value="price">Harga biasa</option><option value="log">Logaritmik</option><option value="percent">Persentase dari bar pertama</option></select></label>
+        <label>Skala harga<select value={draft.scale} onChange={e => set("scale", e.target.value as ChartSettings["scale"])}><option value="price">Harga biasa</option><option value="log">Logaritmik</option><option value="percent">Persentase dari awal tampilan</option></select></label>
         {toggle("grid", "Grid", "Garis bantu horizontal dan vertikal.")}{toggle("magnet", "Crosshair magnet", "Kursor menempel ke nilai seri terdekat.")}
       </fieldset>
     </div>
