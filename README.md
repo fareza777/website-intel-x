@@ -1,5 +1,9 @@
 # CryptoIntel X
 
+Advanced crypto trading intelligence built with Next.js, TypeScript, Python and real Binance spot data. The terminal publishes deterministic research plans and tracks simulated outcomes without placing real orders.
+
+Live application: [cryptointel-x-nu.vercel.app](https://cryptointel-x-nu.vercel.app/). [Verification workflow](https://github.com/fareza777/website-intel-x/actions/workflows/ci.yml) and [scheduled market publisher](https://github.com/fareza777/website-intel-x/actions/workflows/market-data.yml).
+
 The 1H, 4H, and 1D horizon selector changes the actual recommendation and setup score. Equal scores can still occur when the independently measured conditions agree.
 
 ## Local virtual portfolio

@@ -5,8 +5,8 @@ Verified on 2026-10-15 before initial publication.
 - `npm run lint`: passed.
 - `npm run typecheck`: passed.
 - `npm test`: 111 tests passed across 12 files.
-- `npm run build`: passed; static terminal and six server routes compiled.
-- Core Python suite: 33 tests passed, four optional adapters skipped in the system interpreter.
+- `npm run build`: passed; static terminal and five server routes compiled.
+- Core Python suite: 33 tests completed, four optional adapters skipped in the system interpreter.
 - Isolated optional Python environment: all 33 tests passed; dependency consistency checked.
 - `npm audit --omit=dev`: zero production vulnerabilities. The development-only Next ESLint dependency chain reports an upstream unpatched braces advisory; arbitrary external glob expressions are not accepted by the application.
 
@@ -17,3 +17,5 @@ Browser checks used the real local server at desktop 1536×1000 and mobile 390×
 Calculation regressions cover causal/prefix-invariant analysis, context cutoff for every horizon, exact price precision, costs and lot sizing, publication time after scan completion, conservative OHLC fills, gap stops, target milestones, horizon holding limits, immutable originals, conditional WAIT expiry/supersession, duplicate events, import cash conservation, invalid milestone rejection, concurrent journal preservation, and fresh-quote manual virtual exits.
 
 Optional paid Grok requests and external alert webhooks require user-supplied credentials and destinations. Their validation/selection/deduplication paths are tested; no paid provider call or external alert was sent during verification. The terminal and scheduled scanner work without them.
+
+The [production deployment](https://cryptointel-x-nu.vercel.app/) reached READY in Vercel's Singapore region. [GitHub verification](https://github.com/fareza777/website-intel-x/actions/runs/38741506962) and the first [market publisher run](https://github.com/fareza777/website-intel-x/actions/runs/38742303918) completed successfully. Production `/api/market` returned the durable GitHub state with all three research horizons, 29 analyzed markets, the original signal ledger and the real analytical report. Browser checks confirmed independent 1H/4H recommendations, real chart rendering and no console errors.
