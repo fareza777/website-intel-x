@@ -73,6 +73,13 @@ jobs:
         continue-on-error: true
         run: python -m analytics.run --symbol BTCUSDT --limit 1000 --output data/analytics.json
         timeout-minutes: 3
+      - name: Replay production scanner on real history
+        # Same production rules, account ledger and real data; no model or optimization.
+        # The replay refresh is daily, so it does not multiply hourly scan work.
+        if: steps.analytics.outputs.due == 'true'
+        continue-on-error: true
+        run: npx tsx scripts/validate-scanner.ts --days 90
+        timeout-minutes: 5
       - name: Scan and advance immutable originals
         id: scan
         continue-on-error: true
@@ -93,6 +100,7 @@ jobs:
             data/scan-report.json
             data/analytics.json
             data/analytics-attempt.json
+            data/scanner-validation.json
           if-no-files-found: ignore
           retention-days: 14
       - name: Report complete outage as a failed run after saving diagnostics

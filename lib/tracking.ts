@@ -2,6 +2,8 @@ import type { Candle, MarketSnapshot, SignalEvent, StoredState, TrackedSignal } 
 export function emptyState(): StoredState { return { version: 1, updatedAt: "", snapshot: null, signals: [], alerts: [], analytics: null }; }
 export const activeStatuses = new Set(["PENDING", "OPEN", "TP1", "TP2"]);
 const marketKey = (setup: TrackedSignal["setup"]) => `${setup.symbol}:${setup.timeframe ?? "1h"}`;
+export function executionInterval(signal: Pick<TrackedSignal, "setup">): "15m" | "1h" { return signal.setup.timeframe === "15m" ? "15m" : "1h"; }
+export function executionIntervalMs(signal: Pick<TrackedSignal, "setup">): number { return executionInterval(signal) === "15m" ? 900_000 : 3_600_000; }
 
 export function publishSignals(state: StoredState, snapshot: MarketSnapshot, publicationAt = snapshot.generatedAt): StoredState {
   const next = structuredClone(state);
@@ -33,8 +35,9 @@ export function uniqueEvents(events: SignalEvent[]): SignalEvent[] { return [...
 export function hasCompleteSignalHistory(signal: TrackedSignal, now: number): boolean {
   if (!Number.isFinite(now)) return false;
   if (!activeStatuses.has(signal.status)) return true;
-  const first = Math.ceil(Date.parse(signal.publishedAt) / 3_600_000) * 3_600_000;
-  const latestClosedOpen = Math.floor(now / 3_600_000) * 3_600_000 - 3_600_000;
+  const duration = executionIntervalMs(signal);
+  const first = Math.ceil(Date.parse(signal.publishedAt) / duration) * duration;
+  const latestClosedOpen = Math.floor(now / duration) * duration - duration;
   return Number.isFinite(first) && (latestClosedOpen < first || signal.lastEvaluatedTime >= latestClosedOpen);
 }
 
@@ -47,6 +50,7 @@ export function advanceSignal(original: TrackedSignal, candles: Candle[], now: n
   const slip = plan.slippageBps / 10_000;
   const fee = plan.feeBps / 10_000;
   const holdingHours = signal.setup.holdingPeriodHours ?? 72;
+  const duration = executionIntervalMs(signal);
   function event(type: string, at: number, price: number | null, detail: string) {
     signal.events = uniqueEvents([...signal.events, { id: `${signal.setup.id}:${type}`, signalId: signal.setup.id, type, at: new Date(at).toISOString(), price, detail }]);
   }
@@ -70,9 +74,9 @@ export function advanceSignal(original: TrackedSignal, candles: Candle[], now: n
     const openTime = candle.time;
     if (candle.closeTime >= now || openTime < published || candle.time <= signal.lastEvaluatedTime) continue;
     // Do not jump across missing hours and silently assume the unknown path.
-    const expected = signal.lastEvaluatedTime ? signal.lastEvaluatedTime + 3_600_000 : Math.ceil(published / 3_600_000) * 3_600_000;
-    if (candle.time > expected) {
-      event("DATA GAP", now, null, "Outcome evaluation paused: missing hourly candles must be recovered before advancing.");
+    const expected = signal.lastEvaluatedTime ? signal.lastEvaluatedTime + duration : Math.ceil(published / duration) * duration;
+    if (candle.time > expected || candle.time % duration !== 0 || candle.closeTime !== candle.time + duration - 1) {
+      event("DATA GAP", now, null, "Outcome evaluation paused: missing execution candles must be recovered before advancing.");
       break;
     }
     signal.lastEvaluatedTime = candle.time;
@@ -87,7 +91,7 @@ export function advanceSignal(original: TrackedSignal, candles: Candle[], now: n
         signal.entryFill = Math.min(candle.open, plan.entry) * (1 + slip);
         signal.enteredAt = new Date(openTime).toISOString();
         signal.status = "OPEN";
-        event("ENTRY", openTime, signal.entryFill, "Simulated limit entry; hourly OHLC time, not a verified tick execution.");
+        event("ENTRY", openTime, signal.entryFill, `Simulated limit entry; ${executionInterval(signal)} OHLC time, not a verified tick execution.`);
         if (candle.low <= plan.stopLoss) exit(plan.stopLoss, candle.closeTime, true);
         // A target may precede the entry within this bar; never award it.
       }
@@ -108,7 +112,7 @@ export function advanceSignal(original: TrackedSignal, candles: Candle[], now: n
     if (!activeStatuses.has(signal.status)) break;
   }
   // An empty/gapped series cannot prove that an entry was missed.
-  const coveredThroughExpiry = signal.lastEvaluatedTime + 3_600_000 >= expiry;
+  const coveredThroughExpiry = signal.lastEvaluatedTime + duration >= expiry;
   if (signal.status === "PENDING" && !signal.enteredAt && now >= expiry && coveredThroughExpiry) {
     signal.status = "EXPIRED";
     event("EXPIRED", expiry, null, "Entry window closed. No execution recorded; return is unavailable.");

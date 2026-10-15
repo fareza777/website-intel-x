@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -113,6 +113,32 @@ describe("scheduled publisher", () => {
     expect(result.signals.find((signal) => signal.setup.id === "hour-wait")!.status).toBe("INVALIDATED");
     expect(result.signals.find((signal) => signal.setup.id === "four-wait")!.status).toBe("PENDING");
     expect(result.signals.find((signal) => signal.setup.id === "hour-buy")!.status).toBe("PENDING");
+  });
+  it("preserves valid scanner evidence when a later report file is corrupt", async () => {
+    const dir = await directory(), market = snapshot();
+    const report = { version: 1, strategyVersion: "cx-spot-3", codeHash: "a".repeat(64), generatedAt: new Date(now).toISOString(), start: new Date(now - 3_600_000).toISOString(), end: new Date(now).toISOString(),
+      symbols: ["BTCUSDT"], scanIntervalHours: 1, assumedPublicationMinute: 17, closedWindow: 259, capitalPerAccount: 10000, initialCapitalRiskPct: 1, feeBps: 10, slippageBps: 5, rows: [], failures: [], notes: [] };
+    await writeFile(path.join(dir, "scanner-validation.json"), JSON.stringify(report));
+    const first = await runPublisher({ directory: dir, now, scan: async () => market });
+    expect(first.state.scannerValidation).toEqual(report);
+    await writeFile(path.join(dir, "scanner-validation.json"), '{"version":1,"rows":[{"winRate":100}]}');
+    const retry = await runPublisher({ directory: dir, now, previous: first.state, scan: async () => market, candles: async () => [] });
+    expect(retry.state.scannerValidation).toEqual(report);
+  });
+  it("publishes 15M originals and reconciles only closed quarter-hour execution bars", async () => {
+    const dir = await directory(), market = snapshot();
+    const quarter = { ...market.setups[0], id: "BTCUSDT-test-15m", timeframe: "15m" as const, holdingPeriodHours: 18 };
+    market.timeframes = { "15m": [quarter], "1h": [], "4h": [], "1d": [] };
+    const first = await runPublisher({ directory: dir, now, scan: async () => market });
+    expect(candleStartTime(first.state.signals[0])).toBe(Date.parse("2026-10-15T12:30:00Z"));
+    const time = Date.parse("2026-10-15T12:30:00Z"), intervals: string[] = [];
+    const second = await runPublisher({ directory: dir, now: time + 900_000, previous: first.state, scan: async () => market, candles: async (_symbol, interval) => {
+      intervals.push(interval); return [{ time, closeTime: time + 899_999, open: 102, high: 103, low: 99, close: 101, volume: 10, quoteVolume: 1010, takerBuyVolume: 6 }];
+    } });
+    expect(intervals).toEqual(["15m"]);
+    expect(second.state.signals[0].status).toBe("OPEN");
+    expect(second.state.signals[0].setup.timeframe).toBe("15m");
+    expect(second.state.signals[0].lastEvaluatedTime).toBe(time);
   });
   it("records successful webhook event ids and retains failures for later retry", async () => {
     const event: SignalEvent = { id: "s:ENTRY", signalId: "s", type: "ENTRY", at: new Date(now).toISOString(), price: 100, detail: "Fixture" };

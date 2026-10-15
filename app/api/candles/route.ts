@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCandles } from "@/lib/market/binance";
 import { symbolSchema } from "@/lib/validation";
-const schema = z.object({ symbol: symbolSchema, interval: z.enum(["1h", "4h", "1d"]).default("1h"), limit: z.coerce.number().int().min(50).max(1000).default(300), startTime: z.coerce.number().int().min(0).optional() });
+const schema = z.object({ symbol: symbolSchema, interval: z.enum(["15m", "1h", "4h", "1d"]).default("1h"), limit: z.coerce.number().int().min(50).max(1000).default(300), startTime: z.coerce.number().int().min(0).optional() });
 export async function GET(request: Request) {
   const parsed = schema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return NextResponse.json({ error: "Invalid symbol, interval, or candle limit." }, { status: 400 });

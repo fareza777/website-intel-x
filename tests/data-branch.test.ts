@@ -25,11 +25,16 @@ describe("dedicated data branch", () => {
     await mkdir(path.join(f.directory, "archives/originals"), { recursive: true });
     await writeFile(path.join(f.directory, "archives/originals/2026-10.jsonl"), '{"id":"A"}\n');
     await writeFile(path.join(f.directory, "private.env"), "DO_NOT_PUBLISH=fixture\n");
+    await writeFile(path.join(f.directory, "scanner-validation.json"), '{"version":1,"strategyVersion":"cx-spot-3"}');
+    await mkdir(path.join(f.directory, "validation-candles"));
+    await writeFile(path.join(f.directory, "validation-candles/BTCUSDT.json"), '{"raw":"must stay local"}');
     await publishData(f);
     expect(git(f.cwd, "rev-parse", "HEAD")).toBe(head); expect(git(f.cwd, "write-tree")).toBe(tree);
     expect(git(f.remote, "rev-list", "--max-parents=0", "market-data")).not.toBe(head);
     expect(git(f.remote, "show", "market-data:state.json")).toBe('{"version":1}');
     expect(git(f.remote, "ls-tree", "-r", "--name-only", "market-data")).not.toContain("private.env");
+    expect(git(f.remote, "show", "market-data:scanner-validation.json")).toBe('{"version":1,"strategyVersion":"cx-spot-3"}');
+    expect(git(f.remote, "ls-tree", "-r", "--name-only", "market-data")).not.toContain("validation-candles");
   }, 30_000);
   it("rejects archive rewriting and preserves every previously pushed archive", async () => {
     const f = await fixture(); await restoreData(f);

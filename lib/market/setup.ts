@@ -1,15 +1,17 @@
-import type { Candle, MarketSetup, QualificationCheck, Regime, Timeframe } from "../types";
+import type { Candle, ContextTimeframe, MarketSetup, QualificationCheck, Regime, Timeframe } from "../types";
 import { INTERVAL_MS, MarketDataError, validateCandles } from "./binance";
 import { computeIndicators } from "./indicators";
 import { assessTradePlan, MAX_SETUP_RISK_PCT, MIN_SETUP_RISK_PCT } from "./risk";
 import { confirmedPivots, detectStructure } from "./structure";
 import { volumeIntelligence } from "./volume";
 
-export const STRATEGY_VERSION = "cx-spot-2";
+export const STRATEGY_VERSION = "cx-spot-3";
 export const MIN_QUOTE_VOLUME = 5_000_000;
 const TIMEFRAMES: Timeframe[] = ["1h", "4h", "1d"];
 const HORIZONS: Record<Timeframe, { expiresHours: number; holdingHours: number; higher: Timeframe[];
   trends: [Timeframe, number, number][]; momentum: [Timeframe, number][] }> = {
+  "15m": { expiresHours: 6, holdingHours: 18, higher: ["4h", "1h"],
+    trends: [["4h", 20, 5], ["1h", 20, 5], ["15m", 15, 5]], momentum: [["15m", 5], ["1h", 5]] },
   "1h": { expiresHours: 24, holdingHours: 72, higher: ["1d", "4h"],
     trends: [["1d", 20, 5], ["4h", 20, 5], ["1h", 15, 5]], momentum: [["1h", 5], ["4h", 5]] },
   "4h": { expiresHours: 72, holdingHours: 216, higher: ["1d"],
@@ -28,7 +30,7 @@ export interface SetupInput {
   stepSize: number;
   minNotional: number;
   now: number;
-  candles: Record<Timeframe, Candle[]>;
+  candles: Record<ContextTimeframe, Candle[]> & Partial<Record<"15m", Candle[]>>;
 }
 
 /** A deterministic long-spot rule agreement score; it has no probability interpretation. */
@@ -37,18 +39,19 @@ export function analyzeSymbol(input: SetupInput, timeframe: Timeframe = "1h"): M
   const horizon = HORIZONS[timeframe];
   if (!horizon) throw new MarketDataError("Unsupported setup decision timeframe");
   const label = timeframe.toUpperCase();
-  const closedBase = input.candles[timeframe].filter((candle) => candle.closeTime < input.now);
+  const closedBase = (input.candles[timeframe] ?? []).filter((candle) => candle.closeTime < input.now);
   validateCandles(closedBase, timeframe);
   if (!closedBase.length) throw new MarketDataError(`No closed ${timeframe} decision candles are available`);
   const latest = closedBase[closedBase.length - 1];
   // ALL context, including lower frames shown in the UI, stops at this decision close.
-  const candles = Object.fromEntries(TIMEFRAMES.map((interval) => [interval,
-    input.candles[interval].filter((candle) => candle.closeTime <= latest.closeTime)])) as Record<Timeframe, Candle[]>;
-  for (const interval of TIMEFRAMES) {
+  const frames: Timeframe[] = timeframe === "15m" ? ["15m", ...TIMEFRAMES] : TIMEFRAMES;
+  const candles = Object.fromEntries(frames.map((interval) => [interval,
+    (input.candles[interval] ?? []).filter((candle) => candle.closeTime <= latest.closeTime)])) as Record<Timeframe, Candle[]>;
+  for (const interval of frames) {
     validateCandles(candles[interval], interval);
     if (candles[interval].length < 200) throw new MarketDataError(`Insufficient closed ${interval} history for EMA200`);
   }
-  const indicators = { "1h": computeIndicators(candles["1h"]), "4h": computeIndicators(candles["4h"]), "1d": computeIndicators(candles["1d"]) };
+  const indicators = Object.fromEntries(frames.map(interval => [interval, computeIndicators(candles[interval])])) as Record<Timeframe, ReturnType<typeof computeIndicators>>;
   const baseCandles = candles[timeframe];
   const base = indicators[timeframe];
   const structure = detectStructure(baseCandles);
@@ -145,7 +148,7 @@ export function analyzeSymbol(input: SetupInput, timeframe: Timeframe = "1h"): M
     `A new bearish closed ${trendLabel} EMA trend requires reassessment and prevents new ${label} long qualification. Published simulation entry, stop and targets stay fixed; trend changes do not trigger an automatic exit.`,
     `Unfilled ${label} recommendations expire ${horizon.expiresHours} hours after their decision candle; maximum simulated hold after entry is ${horizon.holdingHours} hours. Reassess after any data gap or exchange outage.`,
   ];
-  return { qualification, tickSize: input.tickSize, timeframe, holdingPeriodHours: horizon.holdingHours, id: `${input.symbol}-${timeframe}-${latest.closeTime}-${STRATEGY_VERSION}`, symbol: input.symbol, baseAsset: input.baseAsset, name: NAMES[input.baseAsset] ?? input.baseAsset,
+  return { riskReview: assessment.review, qualification, tickSize: input.tickSize, timeframe, holdingPeriodHours: horizon.holdingHours, id: `${input.symbol}-${timeframe}-${latest.closeTime}-${STRATEGY_VERSION}`, symbol: input.symbol, baseAsset: input.baseAsset, name: NAMES[input.baseAsset] ?? input.baseAsset,
     price: latest.close, change24h: input.change24h, quoteVolume24h: input.quoteVolume24h, score, action, regime,
     asOf: new Date(latest.closeTime).toISOString(), expiresAt: new Date(latest.closeTime + horizon.expiresHours * INTERVAL_MS["1h"]).toISOString(), plan, indicators, reasons, confirmations, invalidations,
     structure: structure.slice(-16), volume, sparkline: baseCandles.slice(-48).map((candle) => candle.close) };

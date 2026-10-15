@@ -1,7 +1,7 @@
 import type { Candle, Timeframe } from "../types";
 
 const HOSTS = ["https://data-api.binance.vision", "https://api.binance.com", "https://api1.binance.com"];
-export const INTERVAL_MS: Record<Timeframe, number> = { "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
+export const INTERVAL_MS: Record<Timeframe, number> = { "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
 const CACHE_MS = 60_000;
 const REQUEST_BUDGET_MS = 25_000;
 const PACE_MS = 120;

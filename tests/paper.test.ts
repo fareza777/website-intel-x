@@ -53,6 +53,13 @@ it("preserves independent 4H research when the virtual account reloads", () => {
   const account = reservePosition(createPaperAccount(1000), horizon, 1, "2026-01-01T00:00:00Z");
   expect(importPaperAccount(JSON.stringify(account)).positions[0].signal.setup.timeframe).toBe("4h");
 });
+it("preserves fresh 15M research and blocks taking a stale or future recommendation", () => {
+  const horizon = { ...setup, timeframe: "15m" as const, holdingPeriodHours: 18, indicators: { ...setup.indicators, "15m": indicator } };
+  const account = reservePosition(createPaperAccount(1000), horizon, 1, "2026-01-01T00:15:00Z");
+  expect(importPaperAccount(JSON.stringify(account)).positions[0].signal.setup.timeframe).toBe("15m");
+  expect(() => reservePosition(createPaperAccount(1000), horizon, 1, "2026-01-01T00:30:01Z")).toThrow(/fresh|stale/i);
+  expect(() => reservePosition(createPaperAccount(1000), horizon, 1, "2025-12-31T23:59:00Z")).toThrow(/future|timestamp/i);
+});
 it("preserves journal edits and newly reserved positions while reconciliation is in flight", () => {
   const original = reservePosition(createPaperAccount(1000), setup, 1, "2026-01-01T00:00:00Z");
   const changed = reservePosition(original, { ...setup, id: "second", symbol: "ETHUSDT", baseAsset: "ETH" }, 1, "2026-01-01T00:00:00Z");

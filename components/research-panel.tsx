@@ -12,7 +12,7 @@ export function CoinIcon({ asset, small = false }: { asset: string; small?: bool
   const glyphs: Record<string, string> = { BTC: "₿", ETH: "Ξ", SOL: "≋", BNB: "◇", XRP: "×", ADA: "₳", DOGE: "Ð", AVAX: "Λ", LINK: "⬡", SUI: "S" };
   return <span className={cn("coin-icon", `coin-${asset.toLowerCase()}`, small && "coin-small")}>{glyphs[asset] || asset.slice(0, 1)}</span>;
 }
-export function ResearchPanel({ setup, capital, risk, onCapital, onRisk, onSimulate, notify, disabled = false }: { setup: MarketSetup; capital: number; risk: number; onCapital: (value: number) => void; onRisk: (value: number) => void; onSimulate: () => void; notify: (text: string) => void; disabled?: boolean }) {
+export function ResearchPanel({ setup, capital, risk, onCapital, onRisk, onSimulate, notify, onGuide, disabled = false }: { setup: MarketSetup; capital: number; risk: number; onCapital: (value: number) => void; onRisk: (value: number) => void; onSimulate: () => void; notify: (text: string) => void; onGuide?: () => void; disabled?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [sizing, setSizing] = useState(false);
   const plan = setup.plan;
@@ -29,7 +29,7 @@ export function ResearchPanel({ setup, capital, risk, onCapital, onRisk, onSimul
     <div className="quality-row"><span>Setup quality <Info size={14} aria-label="Rule agreement, not win probability" /></span><strong>{setup.score}<small> / 100</small></strong></div>
     <div className="quality-track"><span style={{ width: `${setup.score}%` }} /></div>
     <p className="score-note">Technical agreement. Not a win probability.</p>
-    <QualificationSummary setup={setup} />
+    <QualificationSummary setup={setup} capital={capital} risk={risk} onGuide={onGuide} />
     {plan ? <>
       <div className="entry-block"><span>Recommended entry</span><div><strong>{dollars(plan.entry)}</strong><button className="icon-button" title="Copy research plan" aria-label="Copy research plan" onClick={copy}><Copy size={17} /></button></div><p>Zone <b>{price(plan.entryZone[0])} – {price(plan.entryZone[1])}</b></p></div>
       <div className="level-row stop"><span><i /> Stop loss</span><strong>{dollars(plan.stopLoss)}</strong><span>−{plan.riskPct.toFixed(2)}%</span></div>
@@ -44,9 +44,13 @@ export function ResearchPanel({ setup, capital, risk, onCapital, onRisk, onSimul
     {expanded && <div className="reason-content">{setup.reasons.map((reason, i) => <p key={i}><CircleCheck size={15} />{reason}</p>)}<h3>Entry requirements</h3>{setup.confirmations.map((text, i) => <p key={i}>{text}</p>)}<h3>Invalidation</h3>{setup.invalidations.map((text, i) => <p key={i}>{text}</p>)}<p><Clock3 size={15} />Expires {new Date(setup.expiresAt).toLocaleString()}</p></div>}
   </section>;
 }
-export function TimeframeAgreement({ setup }: { setup: MarketSetup }) { return <div className="timeframe-agreement">{(["1h", "4h", "1d"] as const).map(tf => <div key={tf}><span>{tf.toUpperCase()} TREND</span><strong className={setup.indicators[tf].trend === "bullish" ? "positive" : setup.indicators[tf].trend === "bearish" ? "negative" : "muted"}>{setup.indicators[tf].trend}<ArrowUpRight size={15} style={{ transform: setup.indicators[tf].trend === "bearish" ? "rotate(90deg)" : undefined }} /></strong></div>)}</div>; }
+export function TimeframeAgreement({ setup }: { setup: MarketSetup }) {
+  const frames: Timeframe[] = setup.timeframe === "15m" ? ["15m", "1h", "4h"] : ["1h", "4h", "1d"];
+  return <div className="timeframe-agreement">{frames.map(tf => <div key={tf}><span>{tf.toUpperCase()} TREND</span><strong className={setup.indicators[tf]?.trend === "bullish" ? "positive" : setup.indicators[tf]?.trend === "bearish" ? "negative" : "muted"}>{setup.indicators[tf]?.trend ?? "unavailable"}<ArrowUpRight size={15} style={{ transform: setup.indicators[tf]?.trend === "bearish" ? "rotate(90deg)" : undefined }} /></strong></div>)}</div>;
+}
 export function Change({ value }: { value: number }) { return <span className={value >= 0 ? "positive" : "negative"}>{percent(value)}</span>; }
 export function TechnicalContext({ setup, timeframe }: { setup: MarketSetup; timeframe: Timeframe }) {
   const indicator = setup.indicators[timeframe];
+  if (!indicator) return <p className="panel-note">Indikator {timeframe.toUpperCase()} belum tersedia pada publikasi ini.</p>;
   return <div className="technical-context"><div><span>MARKET REGIME</span><strong className={setup.regime === "BEARISH" ? "negative" : "positive"}>{setup.regime.toLowerCase()}</strong></div><div><span>{timeframe.toUpperCase()} RSI · 14</span><strong>{indicator.rsi.toFixed(1)}<small> / 100</small></strong></div><div><span>{timeframe.toUpperCase()} MACD HISTOGRAM</span><strong className={indicator.macdHistogram >= 0 ? "positive" : "negative"}>{price(indicator.macdHistogram)}</strong></div><div><span>{timeframe.toUpperCase()} ATR · 14</span><strong>{dollars(indicator.atr)}</strong></div></div>;
 }

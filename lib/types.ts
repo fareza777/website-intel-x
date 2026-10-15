@@ -1,4 +1,5 @@
-export type Timeframe = "1h" | "4h" | "1d";
+export type Timeframe = "15m" | "1h" | "4h" | "1d";
+export type ContextTimeframe = Exclude<Timeframe, "15m">;
 export type Action = "BUY" | "WAIT" | "NO TRADE";
 export type Regime = "BULLISH" | "BEARISH" | "SIDEWAYS" | "HIGH VOLATILITY";
 export interface SpotQuote { symbol: string; price: number; asOf: string }
@@ -44,6 +45,8 @@ export interface VolumeIntelligence {
   profile: { price: number; volume: number }[];
 }
 export interface MarketSetup {
+  /** Diagnostic candidate levels, also retained when the trade plan is rejected. */
+  riskReview?: { entry: number; stopLoss: number; costedLossPct: number; maximumLossPct: number; feeBps: number; slippageBps: number };
   /** Observed rule checks, frozen with the research; older originals may omit them. */
   qualification?: QualificationCheck[];
   /** Exchange tick size is retained even when no executable trade plan qualifies. */
@@ -65,7 +68,7 @@ export interface MarketSetup {
   asOf: string;
   expiresAt: string;
   plan: TradePlan | null;
-  indicators: Record<Timeframe, IndicatorSet>;
+  indicators: Record<ContextTimeframe, IndicatorSet> & Partial<Record<"15m", IndicatorSet>>;
   reasons: string[];
   confirmations: string[];
   invalidations: string[];
@@ -91,7 +94,7 @@ export interface MarketSnapshot {
   errors: { symbol: string; message: string }[];
   setups: MarketSetup[];
   /** Independently calculated research at each horizon. No other horizon is a fallback. */
-  timeframes?: Record<Timeframe, MarketSetup[]>;
+  timeframes?: Record<ContextTimeframe, MarketSetup[]> & Partial<Record<"15m", MarketSetup[]>>;
   durationMs: number;
   costs: { feeBps: number; slippageBps: number };
 }
@@ -119,6 +122,7 @@ export interface StoredState {
   signals: TrackedSignal[];
   alerts: SignalEvent[];
   analytics: AnalyticsReport | null;
+  scannerValidation?: import("./research/types").ScannerValidationReport | null;
 }
 export interface AnalyticsReport {
   generatedAt: string;

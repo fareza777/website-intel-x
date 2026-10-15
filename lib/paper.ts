@@ -49,6 +49,9 @@ export function reservePosition(account: PaperAccount, setup: MarketSetup, riskP
   setupSchema.parse(setup);
   if (!Number.isFinite(account.cash) || !Number.isFinite(account.initialCapital) || account.cash < 0) throw new Error("Invalid virtual cash balance.");
   const plan = setup.plan;
+  const decisionAge = Date.parse(at) - Date.parse(setup.asOf);
+  if (!Number.isFinite(decisionAge) || decisionAge < 0) throw new Error("Invalid or future recommendation timestamp.");
+  if (setup.timeframe === "15m" && decisionAge > 30 * 60_000) throw new Error("A fresh 15M recommendation within 30 minutes is required. Run a new scan.");
   if (!plan || setup.action !== "BUY" || Date.parse(setup.expiresAt) <= Date.parse(at)) throw new Error("Only current qualified BUY plans can enter the simulator.");
   if (account.positions.some(p => !p.settled && p.signal.setup.symbol === setup.symbol && (p.signal.setup.timeframe ?? "1h") === (setup.timeframe ?? "1h"))) throw new Error("A simulation for this asset and horizon is already active.");
   if (account.positions.filter(p => !p.settled).length >= 10) throw new Error("Maximum 10 active spot simulations per virtual portfolio.");

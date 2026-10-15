@@ -25,8 +25,8 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number }
   const errors: MarketSnapshot["errors"] = [];
   let universeSize = 0;
   let now = startedAt;
-  const frames: Timeframe[] = ["1h", "4h", "1d"];
-  const timeframes: Record<Timeframe, MarketSetup[]> = { "1h": [], "4h": [], "1d": [] };
+  const frames: Timeframe[] = ["15m", "1h", "4h", "1d"];
+  const timeframes: Record<Timeframe, MarketSetup[]> = { "15m": [], "1h": [], "4h": [], "1d": [] };
   const snapshot = (): MarketSnapshot => {
     for (const timeframe of frames) timeframes[timeframe].sort(compareOpportunities);
     const setups = timeframes["1h"];
@@ -67,17 +67,17 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number }
     const results = await Promise.all(universe.map(async (market) => {
       const analyzed: Partial<Record<Timeframe, MarketSetup>> = {};
       try {
-        const [hourlyResult, fourHourlyResult, dailyResult] = await Promise.allSettled([getCandles(market.symbol, "1h"), getCandles(market.symbol, "4h"), getCandles(market.symbol, "1d")]);
-        const fetchErrors = [hourlyResult, fourHourlyResult, dailyResult].flatMap((result, index) =>
+        const candleResults = await Promise.allSettled(frames.map(frame => getCandles(market.symbol, frame)));
+        const fetchErrors = candleResults.flatMap((result, index) =>
           result.status === "rejected" ? [`${frames[index].toUpperCase()} data: ${publicError(result.reason)}`] : []);
-        if (fetchErrors.length) throw new MarketDataError(fetchErrors.join("; "));
-        // All contexts are required for causal EMA200 displays, even when a lower frame does not score.
-        if (hourlyResult.status !== "fulfilled" || fourHourlyResult.status !== "fulfilled" || dailyResult.status !== "fulfilled") return analyzed;
-        const hourly = hourlyResult.value; const fourHourly = fourHourlyResult.value; const daily = dailyResult.value;
-        const failures: string[] = [];
+        // A missing 15M feed does not suppress valid hourly and longer research.
+        if (candleResults.slice(1).some(result => result.status === "rejected")) throw new MarketDataError(fetchErrors.join("; "));
+        const candles = Object.fromEntries(candleResults.map((result, i) => [frames[i], result.status === "fulfilled" ? result.value : []])) as Record<Timeframe, import("../types").Candle[]>;
+        const failures: string[] = [...fetchErrors];
         for (const timeframe of frames) {
+          if (!candles[timeframe].length) continue;
           try {
-            const setup = analyzeSymbol({ ...market, now, candles: { "1h": hourly, "4h": fourHourly, "1d": daily } }, timeframe);
+            const setup = analyzeSymbol({ ...market, now, candles }, timeframe);
             const stale = setup.reasons.find((reason) => reason.startsWith("Rejected stale"));
             if (stale) throw new MarketDataError(stale, "stale");
             analyzed[timeframe] = setup;

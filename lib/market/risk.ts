@@ -1,4 +1,4 @@
-import type { TradePlan } from "../types";
+import type { MarketSetup, TradePlan } from "../types";
 
 export const DEFAULT_COSTS = { feeBps: 10, slippageBps: 5 } as const;
 
@@ -32,7 +32,7 @@ export function positionSize(plan: TradePlan, capital: number, riskPercent: numb
 }
 
 export interface TradePlanInput { price: number; atr: number; support?: number; tickSize: number; stepSize: number; minNotional: number; feeBps?: number; slippageBps?: number }
-export interface TradePlanAssessment { plan: TradePlan | null; reason: "invalid_inputs" | "invalid_levels" | "risk_too_high" | "risk_too_low" | "invalid_targets" | null; riskPct: number | null }
+export interface TradePlanAssessment { plan: TradePlan | null; reason: "invalid_inputs" | "invalid_levels" | "risk_too_high" | "risk_too_low" | "invalid_targets" | null; riskPct: number | null; review?: MarketSetup["riskReview"] }
 export const MIN_SETUP_RISK_PCT = .25;
 export const MAX_SETUP_RISK_PCT = 8;
 
@@ -51,14 +51,15 @@ export function assessTradePlan(input: TradePlanInput): TradePlanAssessment {
   const unitLoss = unitDebit - stopLoss * credit;
   const riskPct = unitLoss / unitDebit * 100;
   if (stopLoss <= 0 || entryZone[0] <= stopLoss || entry <= 0 || !Number.isFinite(riskPct)) return { plan: null, reason: "invalid_levels", riskPct: null };
-  if (riskPct > MAX_SETUP_RISK_PCT) return { plan: null, reason: "risk_too_high", riskPct };
-  if (riskPct < MIN_SETUP_RISK_PCT) return { plan: null, reason: "risk_too_low", riskPct };
+  const review = { entry, stopLoss, costedLossPct: riskPct, maximumLossPct: MAX_SETUP_RISK_PCT, feeBps, slippageBps };
+  if (riskPct > MAX_SETUP_RISK_PCT) return { plan: null, reason: "risk_too_high", riskPct, review };
+  if (riskPct < MIN_SETUP_RISK_PCT) return { plan: null, reason: "risk_too_low", riskPct, review };
   const targets = [2, 3, 4].map((multiple) => {
     const target = roundToStep((unitDebit + multiple * unitLoss) / credit, tickSize, "up");
     return { price: target, rr: (target * credit - unitDebit) / unitLoss, gainPct: (target * credit - unitDebit) / unitDebit * 100 };
   });
-  if (targets[0].price <= entry || targets.some((target, index) => index > 0 && target.price <= targets[index - 1].price)) return { plan: null, reason: "invalid_targets", riskPct };
-  return { plan: { entry, entryZone, stopLoss, targets, riskPct, feeBps, slippageBps, tickSize, stepSize, minNotional }, reason: null, riskPct };
+  if (targets[0].price <= entry || targets.some((target, index) => index > 0 && target.price <= targets[index - 1].price)) return { plan: null, reason: "invalid_targets", riskPct, review };
+  return { plan: { entry, entryZone, stopLoss, targets, riskPct, feeBps, slippageBps, tickSize, stepSize, minNotional }, reason: null, riskPct, review };
 }
 
 export function makeTradePlan(input: TradePlanInput): TradePlan | null { return assessTradePlan(input).plan; }

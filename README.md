@@ -4,15 +4,15 @@ Advanced crypto trading intelligence built with Next.js, TypeScript, Python and 
 
 Live application: [cryptointel-x-nu.vercel.app](https://cryptointel-x-nu.vercel.app/). [Verification workflow](https://github.com/fareza777/website-intel-x/actions/workflows/ci.yml) and [scheduled market publisher](https://github.com/fareza777/website-intel-x/actions/workflows/market-data.yml).
 
-The 1H, 4H, and 1D horizon selector changes the actual recommendation and setup score. Equal scores can still occur when the independently measured conditions agree.
+The 15M, 1H, 4H, and 1D horizon selector changes the actual recommendation and setup score. Equal scores can still occur when the independently measured conditions agree. Recommendation publication remains hourly; new 15M paper entries require a decision within 30 minutes. Chart Studio provides configurable indicators, synchronized panes, candle percentages, presets and saved settings. Indonesian contextual guides explain every page and the actual strategy. See [chart and strategy evidence](docs/chart-and-strategy-evidence.md).
 
 ## Local virtual portfolio
 
 Take a qualified BUY from the trade workspace to reserve virtual cash against the exact displayed plan. The saved recommendation keeps its original timeframe, score, levels, costs, expiry and holding period. Each asset/horizon can have one active local simulation; different horizons are independent and share the same finite cash balance. WAIT research never becomes an executed trade without a new qualified BUY.
 
-The portfolio saves in the browser's IndexedDB, with a small localStorage fallback, and supports validated JSON export/import. Its balance ledger is checked on import. Real Binance quote marks refresh every 30 seconds while open; stale/missing quotes show unavailable P/L. Closed hourly candles reconcile entries, TP/SL and time exits every minute. Manual cancellation and virtual exits first reconcile completed candles; manual exits require a fresh Binance quote and include exit costs. The realized balance curve contains only your own completed virtual trades.
+The portfolio saves in the browser's IndexedDB, with a small localStorage fallback, and supports validated JSON export/import. Its balance ledger is checked on import. Real Binance quote marks refresh every 30 seconds while open; stale/missing quotes show unavailable P/L. Closed 15-minute candles for 15M research and hourly candles for other horizons reconcile entries, TP/SL and time exits every minute. Manual cancellation and virtual exits first reconcile completed candles; manual exits require a fresh Binance quote and include exit costs. The realized balance curve contains only your own completed virtual trades.
 
-Records and journals remain on this device and origin. They are not uploaded to the public signal branch. Browser storage can be cleared, so export backups when needed. Closed-hourly OHLC cannot prove exact tick fills or intrabar order; conservative stop-first resolution and no same-entry-bar target credit are explicit model assumptions.
+Records and journals remain on this device and origin. They are not uploaded to the public signal branch. Browser storage can be cleared, so export backups when needed. Closed-candle OHLC cannot prove exact tick fills or intrabar order; conservative stop-first resolution and no same-entry-bar target credit are explicit model assumptions.
 
 A spot research terminal built with Next.js, TypeScript and TradingView Lightweight Charts. It scans real Binance public data, explains deterministic technical rules, records immutable research plans, and simulates later outcomes. No trading account, exchange key or LLM is required. It never places orders.
 
@@ -63,14 +63,15 @@ Set `SCAN_SYMBOLS` to a comma/space-separated list of one to fifty USDT markets,
 ## What the numbers mean
 
 - Market cards, radar prices and the workspace price use a separate Binance quote checked every **30 seconds** while visible. Unavailable or old quotes show no current price. Closed charts check for new completed candles every minute; an hourly/daily candle changes only after it closes. The research reference price is the **last closed candle's close at the recommendation scan**, identified by `asOf`. Setup scores, daily change and daily volume remain tied to that scan; plans and archived outcomes are never rewritten by quote updates.
-- The 1H, 4H and 1D views have separate recommendation scores, causal structure, volume windows, ATR stops and target plans. They reuse the same three downloaded datasets, rather than multiplying exchange requests. SMA-seeded EMA, Wilder RSI/ATR and MACD remain causal; pivots require right-side confirmation. A score measures rule agreement, **not win probability**.
+- The 15M, 1H, 4H and 1D views have separate recommendation scores, causal structure, volume windows, ATR stops and target plans. They reuse the same four downloaded datasets, rather than multiplying exchange requests. SMA-seeded EMA, Wilder RSI/ATR and MACD remain causal; pivots require right-side confirmation. A score measures rule agreement, **not win probability**.
 - Markets sort by BUY, WAIT, then NO TRADE before technical quality. Each new setup publishes its safety and entry checklist, including the actual cost-adjusted stop risk when a plan is rejected. High technical scores cannot override a failed risk, liquidity, trend or volatility check. Missing or more than two-hour-old scan timestamps are stale under the hourly schedule.
 - Costs default to **ten basis points fee and five basis points adverse slippage on each side**. Targets and sizing include both entry and exit costs, capital limits, lot steps and minimum notional. These are research assumptions, not a complete exchange order validator.
 - Session VWAP uses reported quote/base totals. Candle-distributed profiles and POC approximate traded volume at price. Order blocks, FVGs and sweeps are price-action heuristics, not proof of institutional activity.
-- Published levels stay fixed. All horizons evaluate fills using subsequent full hourly bars; the candle already underway at publication is ignored. For an already-open position, known opening stop/target events are resolved before subsequent intrabar events; favorable target gaps fill at the fixed target, and adverse stop gaps include the worse opening price. Stops win otherwise ambiguous stop/target bars, and a new limit fill receives no same-bar target credit. TP1/TP2 are milestones; the full exit is TP3, stop or the configured horizon's holding limit. Unfilled originals expire at their fixed expiry after sufficient candle coverage. Missing history pauses evaluation and blocks manual cancellation/exit until every eligible completed hour is reconciled.
+- Published levels stay fixed. 15M evaluates fills using subsequent full 15-minute bars; other horizons use subsequent full hourly bars; the candle already underway at publication is ignored. For an already-open position, known opening stop/target events are resolved before subsequent intrabar events; favorable target gaps fill at the fixed target, and adverse stop gaps include the worse opening price. Stops win otherwise ambiguous stop/target bars, and a new limit fill receives no same-bar target credit. TP1/TP2 are milestones; the full exit is TP3, stop or the configured horizon's holding limit. Unfilled originals expire at their fixed expiry after sufficient candle coverage. Missing history pauses evaluation and blocks manual cancellation/exit until every eligible completed execution bar is reconciled.
 
 | Research horizon | Unfilled expiry | Maximum open holding period |
 | --- | --- | --- |
+| 15M | 6 hours | 18 hours |
 | 1H | 24 hours | 72 hours |
 | 4H | 72 hours | 216 hours |
 | 1D | 168 hours | 720 hours |
@@ -81,11 +82,15 @@ Higher-timeframe changes require reassessment and affect qualification of new re
 
 The [2026-10-15 accuracy audit](docs/accuracy-audit-2026-10-15.md) documents real-market qualification counts, independent indicator comparisons, regression coverage and the limits of the performance evidence.
 
+## Production scanner replay
+
+Run `npx tsx scripts/validate-scanner.ts --days 90` to replay the actual decision, publication, lifecycle and portfolio functions on real BTC/ETH/SOL history. The daily publisher attaches this validated compact report to state. Strategy Lab displays independent pair/horizon accounts, costs, completed trade counts, marked returns, drawdown, chronological windows and inspectable trades. This is retrospective research with limited evidence, not an assertion of proven profitability; the Python baseline comparison remains separate.
+
 ## Durable data and retention
 
-The public data branch contains compact `state.json`, the latest `analytics.json`, scan diagnostics, optional webhook delivery ids, and monthly JSONL archives. Every BUY/WAIT original is archived once with its original setup. Every final outcome is archived once. State keeps all active originals plus the latest one thousand completed records; monthly archives are retained without automatic expiry. No full candle downloads or binary databases are committed. Diagnostic workflow artifacts expire after fourteen days and are separate from durable archives.
+The public data branch contains compact `state.json`, the latest `analytics.json` and `scanner-validation.json`, scan diagnostics, optional webhook delivery ids, and monthly JSONL archives. Every BUY/WAIT original is archived once with its original setup. Every final outcome is archived once. State keeps all active originals plus the latest one thousand completed records; monthly archives are retained without automatic expiry. No full candle downloads or binary databases are committed. Diagnostic workflow artifacts expire after fourteen days and are separate from durable archives.
 
-The daily analytical report compares two fixed chronological long-spot rules on real historical data. It is **not a measured backtest of the terminal's full scoring engine**. Optional packages add descriptive diagnostics and independent comparisons without changing the core trade series. Short samples, no-trade folds, negative results and unavailable optional diagnostics are reported honestly.
+The daily Python analytical report compares two fixed chronological long-spot rules on real historical data. It is **not a measured backtest of the terminal's full scoring engine**. Optional packages add descriptive diagnostics and independent comparisons without changing the core trade series. Short samples, no-trade folds, negative results and unavailable optional diagnostics are reported honestly.
 
 ## Deployment and optional integrations
 

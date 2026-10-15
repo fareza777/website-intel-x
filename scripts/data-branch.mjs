@@ -5,7 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const BRANCH = "refs/heads/market-data";
-const ROOT_FILES = new Set(["state.json", "analytics.json", "analytics-attempt.json", "scan-report.json", "alert-delivery.json"]);
+const ROOT_FILES = new Set(["state.json", "analytics.json", "analytics-attempt.json", "scanner-validation.json", "scan-report.json", "alert-delivery.json"]);
 const ARCHIVE = /^archives\/(originals|outcomes)\/\d{4}-\d{2}\.jsonl$/;
 const managed = (name) => ROOT_FILES.has(name) || ARCHIVE.test(name);
 

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { Candle, Timeframe } from "../lib/types";
+import type { Candle, ContextTimeframe } from "../lib/types";
 import { INTERVAL_MS } from "../lib/market/binance";
 import { analyzeSymbol, type SetupInput } from "../lib/market/setup";
 
 const now = Date.UTC(2026, 9, 15, 12, 1);
-const horizons: Timeframe[] = ["1h", "4h", "1d"];
+const horizons: ContextTimeframe[] = ["1h", "4h", "1d"];
 
-function series(interval: Timeframe): Candle[] {
+function series(interval: ContextTimeframe): Candle[] {
   const duration = INTERVAL_MS[interval];
   const end = Math.floor(now / duration) * duration;
   return Array.from({ length: 260 }, (_, index) => {
@@ -60,7 +60,7 @@ describe("independent causal setup horizons", () => {
       const timeframe = horizons[index];
       expect(setup.timeframe).toBe(timeframe);
       expect(setup.id).toContain(`-${timeframe}-`);
-      expect(setup.id).toContain("cx-spot-2");
+      expect(setup.id).toContain("cx-spot-3");
       expect(setup.asOf).toBe(new Date(source.candles[timeframe].at(-1)!.closeTime).toISOString());
       expect(setup.plan).not.toBeNull();
       expect(setup.plan!.entry).toBeCloseTo(Math.floor((setup.price - setup.indicators[timeframe].atr * 0.1) / 0.01 + 1e-10) * 0.01, 8);

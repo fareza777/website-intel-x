@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Timeframe } from "../lib/types";
 
 const now = Date.UTC(2026, 9, 15, 12, 1);
-const durations: Record<Timeframe, number> = { "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
+const durations: Record<Timeframe, number> = { "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
 function exchangeSymbol(baseAsset: string) {
   return { symbol: `${baseAsset}USDT`, baseAsset, quoteAsset: "USDT", status: "TRADING", isSpotTradingAllowed: true,
     filters: [{ filterType: "PRICE_FILTER", minPrice: "0.01", maxPrice: "1000000", tickSize: "0.01" }, { filterType: "LOT_SIZE", minQty: "0.001", maxQty: "1000000", stepSize: "0.001" }, { filterType: "MIN_NOTIONAL", minNotional: "5", applyToMarket: true, avgPriceMins: 5 }] };
@@ -96,7 +96,7 @@ describe("scanner universe and data status", () => {
     expect(first.status).toBe("live");
     expect(first.universeSize).toBe(30);
     expect(first.setups.map((setup) => setup.symbol)).toEqual(bases.slice(0, 30).map((base) => `${base}USDT`));
-    expect(requests.filter((url) => url.pathname.endsWith("/klines"))).toHaveLength(90);
+    expect(requests.filter((url) => url.pathname.endsWith("/klines"))).toHaveLength(120);
     expect(first.timeframes?.["1h"]).toEqual(first.setups);
     expect(first.timeframes?.["4h"]).toHaveLength(30);
     expect(first.timeframes?.["1d"]).toHaveLength(30);
@@ -121,6 +121,6 @@ describe("scanner universe and data status", () => {
     expect(result.timeframes?.["1d"]).toEqual([]);
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0].message).toMatch(/1D.*Insufficient closed 1h/i);
-    expect(requests.filter((url) => url.pathname.endsWith("/klines"))).toHaveLength(3);
+    expect(requests.filter((url) => url.pathname.endsWith("/klines"))).toHaveLength(4);
   });
 });

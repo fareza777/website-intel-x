@@ -3,12 +3,13 @@ import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { AnalyticsReport, Candle, MarketSnapshot, SignalEvent, StoredState, TrackedSignal } from "../lib/types";
-import { activeStatuses, advanceSignal, emptyState, publishSignals, uniqueEvents } from "../lib/tracking";
+import { activeStatuses, advanceSignal, emptyState, executionInterval, executionIntervalMs, publishSignals, uniqueEvents } from "../lib/tracking";
 import { getCandles, getExchangeTime } from "../lib/market/binance";
 import { scanMarket } from "../lib/market/scanner";
 import { dataDirectory } from "../lib/storage";
+import { scannerReportSchema } from "../lib/research/validation";
+import type { ScannerValidationReport } from "../lib/research/types";
 
-const HOUR = 3_600_000;
 const FINAL = new Set(["TP3", "STOPPED", "EXPIRED", "INVALIDATED", "CLOSED"]);
 
 export function parseScanSymbols(value?: string): string[] | undefined {
@@ -22,7 +23,8 @@ export function parseScanSymbols(value?: string): string[] | undefined {
 export function candleStartTime(signal: TrackedSignal): number {
   const published = Date.parse(signal.publishedAt);
   if (!Number.isFinite(published) || !Number.isSafeInteger(signal.lastEvaluatedTime) || signal.lastEvaluatedTime < 0) throw new Error("Invalid published signal timestamps");
-  return signal.lastEvaluatedTime ? signal.lastEvaluatedTime + HOUR : Math.ceil(published / HOUR) * HOUR;
+  const duration = executionIntervalMs(signal);
+  return signal.lastEvaluatedTime ? signal.lastEvaluatedTime + duration : Math.ceil(published / duration) * duration;
 }
 
 export function retainSignals(signals: TrackedSignal[]): TrackedSignal[] {
@@ -144,6 +146,15 @@ async function analyticsReport(directory: string, previous: AnalyticsReport | nu
   } catch { return previous; }
 }
 
+async function scannerValidationReport(directory: string, previous: ScannerValidationReport | null): Promise<ScannerValidationReport | null> {
+  try {
+    const text = await optionalFile(path.join(directory, "scanner-validation.json"));
+    if (!text || text.length > 8_000_000) return previous;
+    const parsed = scannerReportSchema.safeParse(JSON.parse(text));
+    return parsed.success ? parsed.data : previous;
+  } catch { return previous; }
+}
+
 interface PublisherOptions {
   directory: string;
   previous?: StoredState;
@@ -151,7 +162,7 @@ interface PublisherOptions {
   symbols?: string[];
   limit?: number;
   scan?: () => Promise<MarketSnapshot>;
-  candles?: (symbol: string, interval: "1h", limit?: number, startTime?: number) => Promise<Candle[]>;
+  candles?: (symbol: string, interval: "15m" | "1h", limit?: number, startTime?: number) => Promise<Candle[]>;
   webhook?: string;
 }
 
@@ -172,11 +183,11 @@ export async function runPublisher(options: PublisherOptions): Promise<{ exitCod
         if (!activeStatuses.has(signal.status)) continue;
         if (Date.now() >= deadline) { evaluationErrors.push({ symbol: signal.setup.symbol, message: "Outcome evaluation deferred: publisher time budget reached" }); continue; }
         try {
-          const candles = await (options.candles ?? getCandles)(signal.setup.symbol, "1h", 1_000, candleStartTime(signal));
+          const candles = await (options.candles ?? getCandles)(signal.setup.symbol, executionInterval(signal), 1_000, candleStartTime(signal));
           evaluated[index] = advanceSignal(signal, candles, now);
           const gap = evaluated[index].events.find((event) => event.type === "DATA GAP");
-          if (gap && evaluated[index].lastEvaluatedTime === signal.lastEvaluatedTime) evaluationErrors.push({ symbol: signal.setup.symbol, message: "Outcome evaluation paused: missing closed hourly history" });
-        } catch { evaluationErrors.push({ symbol: signal.setup.symbol, message: "Outcome evaluation deferred: closed hourly data unavailable" }); }
+          if (gap && evaluated[index].lastEvaluatedTime === signal.lastEvaluatedTime) evaluationErrors.push({ symbol: signal.setup.symbol, message: "Outcome evaluation paused: missing closed execution history" });
+        } catch { evaluationErrors.push({ symbol: signal.setup.symbol, message: "Outcome evaluation deferred: closed execution data unavailable" }); }
       }
     }));
   }
@@ -197,6 +208,7 @@ export async function runPublisher(options: PublisherOptions): Promise<{ exitCod
   const fresh = uniqueEvents(next.signals.flatMap((signal) => signal.events)).filter((event) => !previousEventIds.has(event.id) && event.type !== "CONDITIONAL");
   next.alerts = uniqueEvents([...next.alerts, ...fresh]).slice(-200);
   next.analytics = await analyticsReport(options.directory, previous.analytics);
+  next.scannerValidation = await scannerValidationReport(options.directory, previous.scannerValidation ?? null);
   await archiveState(options.directory, next);
   next.signals = retainSignals(next.signals);
   await writeAtomicJson(path.join(options.directory, "state.json"), next);
