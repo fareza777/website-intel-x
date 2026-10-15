@@ -1,0 +1,11 @@
+# Optional research adapters only. The analytics CLI and tests need no third-party packages.
+# Primary PyPI metadata/wheels verified 2026-10-15 for CPython 3.12 Linux / 3.13 Windows.
+# Compatible shared numerical stack; top-level pins, not a complete transitive lock file.
+numpy==2.2.6
+pandas==2.2.3
+scipy==1.15.3
+pandas-ta-classic==0.8.32
+ruptures==1.1.10
+river==0.26.1
+quantstats==0.0.86
+# smartmoneyconcepts / MarketProfile are audited and deferred; never mandatory pins.

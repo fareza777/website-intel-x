@@ -1,0 +1,100 @@
+name: Publish market data
+
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: 'Optional comma-separated USDT watchlist, 1–50 symbols; blank scans the liquid universe'
+        required: false
+        type: string
+      analytics:
+        description: 'Force the daily analytical report on this manual run'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-data-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      DATA_DIRECTORY: data
+      SCAN_SYMBOLS: ${{ inputs.symbols || vars.SCAN_SYMBOLS || '' }}
+      SCAN_LIMIT: ${{ vars.SCAN_LIMIT || '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        timeout-minutes: 5
+      - name: Restore dedicated data branch
+        id: restore
+        run: node scripts/data-branch.mjs restore
+        timeout-minutes: 2
+      - name: Decide daily analytics
+        id: analytics
+        env:
+          FORCE_ANALYTICS: ${{ inputs.analytics == true && 'true' || 'false' }}
+        run: |
+          if [ "$FORCE_ANALYTICS" = true ]; then
+            node scripts/data-branch.mjs analytics-due --force
+          else
+            node scripts/data-branch.mjs analytics-due
+          fi
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        if: steps.analytics.outputs.due == 'true'
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-analytics.txt
+      - name: Install optional daily analytics adapters
+        if: steps.analytics.outputs.due == 'true'
+        continue-on-error: true
+        run: 'python -m pip install --only-binary=:all: -r requirements-analytics.txt'
+        timeout-minutes: 5
+      - name: Refresh daily real-data analytics
+        if: steps.analytics.outputs.due == 'true'
+        continue-on-error: true
+        run: python -m analytics.run --symbol BTCUSDT --limit 1000 --output data/analytics.json
+        timeout-minutes: 3
+      - name: Scan and advance immutable originals
+        id: scan
+        continue-on-error: true
+        env:
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+        run: npm run scan -- --publish
+        timeout-minutes: 4
+      - name: Persist diagnostics and state even after an exchange outage
+        if: always() && !cancelled() && steps.restore.outcome == 'success'
+        run: node scripts/data-branch.mjs publish
+        timeout-minutes: 2
+      - name: Keep compact diagnostic artifact
+        if: always() && !cancelled() && steps.restore.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: market-diagnostics-${{ github.run_id }}
+          path: |
+            data/scan-report.json
+            data/analytics.json
+            data/analytics-attempt.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Report complete outage as a failed run after saving diagnostics
+        if: always() && !cancelled() && steps.scan.outcome == 'failure'
+        run: exit 1
