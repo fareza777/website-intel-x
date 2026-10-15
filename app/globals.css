@@ -1,4 +1,14 @@
 @import "tailwindcss";
+
+.update-policy { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: -7px 0 23px; color: #acb9ce; font-size: 14px; line-height: 1.7; }
+.update-policy > span:first-child { color: #a9c5ff; display: flex; gap: 8px; align-items: center; }
+.update-policy i { width: 7px; height: 7px; border-radius: 50%; background: #79a7ff; }
+.update-policy .unavailable, .chart-refresh-note.unavailable { color: #e7b57d; }
+.update-policy .unavailable i { background: #e7b57d; }
+.live-price-label, .live-quote > small { color: #a8b8d0; font-size: 14px; line-height: 1.7; }
+.live-quote { display: flex; flex-direction: column; gap: 2px; }
+.research-reference { color: #b1bdd1; font-size: 14px; line-height: 1.8; padding: 0 19px 15px; }
+.chart-refresh-note { color: #a7b6cd; font-size: 13px; line-height: 1.7; padding: 9px 16px; border-top: 1px solid #252d3c; }
 @custom-variant dark (&:is(.dark *));
 @theme inline {
   --color-background: #0b0d12;

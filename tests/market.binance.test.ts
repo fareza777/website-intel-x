@@ -169,12 +169,25 @@ describe("bounded public spot quotes", () => {
     const first = await api.getSpotPrices([" ethusdt ", "BTCUSDT", "BTCUSDT"]);
     expect(first.map((quote) => [quote.symbol, quote.price])).toEqual([["BTCUSDT", 65000.25], ["ETHUSDT", 2800.5]]);
     expect(first[0].asOf).toBe(new Date(Date.UTC(2026, 9, 15, 12)).toISOString());
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(5_000);
     const repeated = await api.getSpotPrices(["BTCUSDT", "ETHUSDT"]);
     expect(repeated).toEqual(first);
     expect(requests).toHaveLength(1);
     expect(requests[0].pathname).toBe("/api/v3/ticker/price");
     expect(JSON.parse(requests[0].searchParams.get("symbols")!)).toEqual(["BTCUSDT", "ETHUSDT"]);
+  });
+
+  it("receives a new exchange quote on the next 30-second display refresh", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(Date.UTC(2026, 9, 15, 12));
+    let requests = 0;
+    vi.stubGlobal("fetch", async () => Response.json([{ symbol: "BTCUSDT", price: String(65000 + ++requests) }]));
+    const api = await import("../lib/market/binance");
+    const first = await api.getSpotPrices(["BTCUSDT"]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    const next = await api.getSpotPrices(["BTCUSDT"]);
+    expect(requests).toBe(2);
+    expect(next[0].price).not.toBe(first[0].price);
+    expect(Date.parse(next[0].asOf) - Date.parse(first[0].asOf)).toBe(30_000);
   });
 
   it("rejects excessive or invalid batches and avoids requests for an empty portfolio", async () => {

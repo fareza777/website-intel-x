@@ -113,11 +113,11 @@ async function fetchPublic(path: string): Promise<{ data: unknown; receivedAt: n
   throw new MarketDataError("Public Binance data is unavailable", "network");
 }
 
-async function request(path: string, parameters: Record<string, string | number> = {}): Promise<{ data: unknown; receivedAt: number }> {
+async function request(path: string, parameters: Record<string, string | number> = {}, cacheMs = CACHE_MS): Promise<{ data: unknown; receivedAt: number }> {
   const query = new URLSearchParams(Object.entries(parameters).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => [key, String(value)]));
   const key = `/api/v3/${path}${query.size ? `?${query}` : ""}`;
   const existing = cache.get(key);
-  if (existing && Date.now() - existing.receivedAt < CACHE_MS) return existing;
+  if (existing && Date.now() - existing.receivedAt < cacheMs) return existing;
   const inFlight = pending.get(key);
   if (inFlight) return inFlight;
   const result = fetchPublic(key).then((entry) => {
@@ -232,7 +232,7 @@ export async function getSpotPrices(symbols: string[]): Promise<{ symbol: string
     if (typeof symbol !== "string") throw new MarketDataError("Invalid spot quote symbol");
     return normalizeSymbol(symbol);
   }))].sort();
-  const entry = await request("ticker/price", { symbols: JSON.stringify(normalized) });
+  const entry = await request("ticker/price", { symbols: JSON.stringify(normalized) }, 15_000);
   if (!Array.isArray(entry.data)) throw new MarketDataError("Invalid spot quote response");
   const prices = new Map<string, number>();
   for (const raw of entry.data) {

@@ -4,6 +4,7 @@ import { CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMod
 import { Activity, LoaderCircle, RefreshCw } from "lucide-react";
 import type { Candle, MarketSetup, Timeframe } from "@/lib/types";
 import { decimalPlaces, price } from "@/lib/utils";
+import { CANDLE_REFRESH_MS } from "@/lib/live-market";
 import { Button } from "./ui/button";
 
 export function Sparkline({ values, negative = false }: { values: number[]; negative?: boolean }) {
@@ -27,12 +28,27 @@ export function MarketChart({ setup, timeframe, refresh, showLevels = true, show
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/api/candles?symbol=${setup.symbol}&interval=${timeframe}&limit=300`, { signal: controller.signal }).then(async response => {
-      const data = await response.json();
-      if (!response.ok || !data.candles?.length) throw new Error(data.error || "Closed candle data is unavailable.");
-      setCandles(data.candles);
-    }).catch(error => { if (error.name !== "AbortError") { setError(error.message); setCandles([]); } }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
+    let inFlight = false;
+    async function loadCandles() {
+      if (inFlight || controller.signal.aborted) return;
+      inFlight = true;
+      try {
+        const response = await fetch(`/api/candles?symbol=${setup.symbol}&interval=${timeframe}&limit=300`, { signal: controller.signal, cache: "no-store" });
+        const data = await response.json();
+        if (!response.ok || !data.candles?.length) throw new Error(data.error || "Closed candle data is unavailable.");
+        if (controller.signal.aborted) return;
+        setCandles(previous => JSON.stringify(previous) === JSON.stringify(data.candles) ? previous : data.candles);
+        setError("");
+      } catch (error) {
+        if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Candle refresh unavailable.");
+      } finally { inFlight = false; if (!controller.signal.aborted) setLoading(false); }
+    }
+    void loadCandles();
+    const interval = setInterval(() => { if (document.visibilityState === "visible") void loadCandles(); }, CANDLE_REFRESH_MS);
+    const onVisible = () => { if (document.visibilityState === "visible") void loadCandles(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => { controller.abort(); clearInterval(interval); document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible); };
   }, [setup.symbol, timeframe, refresh, retry]);
   useEffect(() => {
     if (!container.current || !candles.length || loading) return;
@@ -75,6 +91,7 @@ export function MarketChart({ setup, timeframe, refresh, showLevels = true, show
   return <div className="chart-wrap">
     <div className="chart-ohlc">{last && !loading ? <><span>O <b>{price(last.open)}</b></span><span>H <b>{price(last.high)}</b></span><span>L <b>{price(last.low)}</b></span><span>C <b>{price(last.close)}</b></span><span className="closed-label">Closed candles</span></> : <span>Binance spot · {timeframe.toUpperCase()} · closed candles</span>}</div>
     <div className="chart-canvas" ref={container} />
-    {(loading || error) && <div className="chart-state">{loading ? <><LoaderCircle className="spin" size={28} /><p>Loading real market data</p></> : <><Activity size={28} /><p>{error}</p><Button variant="outline" onClick={() => { setLoading(true); setError(""); setRetry(v => v + 1); }}><RefreshCw /> Retry data</Button></>}</div>}
+    {(loading || (error && !candles.length)) && <div className="chart-state">{loading ? <><LoaderCircle className="spin" size={28} /><p>Loading real market data</p></> : <><Activity size={28} /><p>{error}</p><Button variant="outline" onClick={() => { setLoading(true); setError(""); setRetry(v => v + 1); }}><RefreshCw /> Retry data</Button></>}</div>}
+    {!loading && candles.length > 0 && <div className={error ? "chart-refresh-note unavailable" : "chart-refresh-note"}>{error ? "Candle refresh unavailable · displaying the last received history" : "Checks for closed candles every minute"} · Last close {new Date(last!.closeTime).toLocaleString()}</div>}
   </div>;
 }

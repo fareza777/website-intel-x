@@ -21,20 +21,25 @@ export async function writeLocalState(state: StoredState): Promise<void> {
 
 let cached: { expires: number; value: StoredState } | null = null;
 export async function readPublishedState(): Promise<{ state: StoredState; persistence: "github" | "local" | "unavailable" }> {
-  if (!process.env.VERCEL) {
-    const state = await readLocalState();
-    if (state.snapshot) return { state, persistence: "local" };
+  const local = process.env.VERCEL ? null : await readLocalState();
+  const publicationTime = (state: StoredState) => Date.parse(state.updatedAt || state.snapshot?.generatedAt || "") || 0;
+  function newest(remote: StoredState | null): { state: StoredState; persistence: "github" | "local" | "unavailable" } {
+    if (local?.snapshot && (!remote || publicationTime(local) > publicationTime(remote))) return { state: local, persistence: "local" };
+    if (remote) return { state: remote, persistence: "github" };
+    return { state: emptyState(), persistence: "unavailable" };
   }
-  if (cached && cached.expires > Date.now()) return { state: cached.value, persistence: "github" };
+  if (cached && cached.expires > Date.now()) return newest(cached.value);
   try {
-    const response = await fetch(`https://raw.githubusercontent.com/${repo}/market-data/state.json`, { signal: AbortSignal.timeout(12_000), next: { revalidate: 60 } });
+    // Share a bounded minute key across readers: raw branch URLs otherwise retain
+    // an older publication in GitHub's five-minute CDN cache after a successful push.
+    const minute = Math.floor(Date.now() / 60_000);
+    const response = await fetch(`https://raw.githubusercontent.com/${repo}/market-data/state.json?minute=${minute}`, { signal: AbortSignal.timeout(12_000), cache: "no-store" });
     if (!response.ok) throw new Error("Published state unavailable");
     const state = await response.json() as StoredState;
     if (state.version !== 1 || !Array.isArray(state.signals) || !Array.isArray(state.snapshot?.setups)) throw new Error("Invalid published state");
     cached = { value: state, expires: Date.now() + 60_000 };
-    return { state, persistence: "github" };
+    return newest(state);
   } catch {
-    if (cached) return { state: cached.value, persistence: "github" };
-    return { state: emptyState(), persistence: "unavailable" };
+    return newest(cached?.value ?? null);
   }
 }
