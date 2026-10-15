@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { activeStatuses } from "./tracking";
+import { activeStatuses, hasCompleteSignalHistory } from "./tracking";
 import { eventSchema, setupSchema } from "./validation";
 import { roundToStep } from "./market/risk";
 import type { MarketSetup, TrackedSignal } from "./types";
@@ -100,6 +100,7 @@ export function settlePaperPosition(account: PaperAccount, signalId: string, pub
   const position = account.positions[index];
   if (!position) throw new Error("Virtual position was not found.");
   if (position.settled) return account;
+  if (!hasCompleteSignalHistory(position.signal, Date.parse(at))) throw new Error("Complete closed-candle history is required before manual cancellation or exit.");
   const signal = structuredClone(position.signal);
   const plan = signal.setup.plan!;
   if (action.kind === "cancel") {

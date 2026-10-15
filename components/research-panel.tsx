@@ -5,6 +5,7 @@ import { Button } from "./ui/button";
 import { cn, dollars, percent, price } from "@/lib/utils";
 import { positionSize } from "@/lib/market/risk";
 import type { MarketSetup, Timeframe } from "@/lib/types";
+import { QualificationSummary } from "./market-eligibility";
 
 export function ActionBadge({ action }: { action: string }) { return <span className={cn("action-badge", action === "BUY" ? "buy" : action === "WAIT" ? "wait" : "no-trade")}>{action === "BUY" ? <ArrowUpRight size={13} /> : action === "WAIT" ? <Clock3 size={13} /> : <span className="badge-dot" />}{action === "BUY" ? "BUY SETUP" : action}</span>; }
 export function CoinIcon({ asset, small = false }: { asset: string; small?: boolean }) {
@@ -28,6 +29,7 @@ export function ResearchPanel({ setup, capital, risk, onCapital, onRisk, onSimul
     <div className="quality-row"><span>Setup quality <Info size={14} aria-label="Rule agreement, not win probability" /></span><strong>{setup.score}<small> / 100</small></strong></div>
     <div className="quality-track"><span style={{ width: `${setup.score}%` }} /></div>
     <p className="score-note">Technical agreement. Not a win probability.</p>
+    <QualificationSummary setup={setup} />
     {plan ? <>
       <div className="entry-block"><span>Recommended entry</span><div><strong>{dollars(plan.entry)}</strong><button className="icon-button" title="Copy research plan" aria-label="Copy research plan" onClick={copy}><Copy size={17} /></button></div><p>Zone <b>{price(plan.entryZone[0])} – {price(plan.entryZone[1])}</b></p></div>
       <div className="level-row stop"><span><i /> Stop loss</span><strong>{dollars(plan.stopLoss)}</strong><span>−{plan.riskPct.toFixed(2)}%</span></div>

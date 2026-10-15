@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { SCAN_INTERVAL_HOURS } from "./live-market";
 export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
 export function price(value: number | null | undefined, compact = false): string {
   if (value == null || !Number.isFinite(value)) return "—";
@@ -18,4 +19,7 @@ export function relativeTime(value: string | null | undefined): string {
   const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 60_000));
   return minutes < 1 ? "Just now" : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m ago` : `${Math.floor(minutes / 1440)}d ago`;
 }
-export function isStale(generatedAt: string | null | undefined): boolean { return !generatedAt || Date.now() - Date.parse(generatedAt) > 5 * 3_600_000; }
+export function isStale(generatedAt: string | null | undefined, now = Date.now()): boolean {
+  const age = now - Date.parse(generatedAt || "");
+  return !Number.isFinite(age) || age < -60_000 || age > 2 * SCAN_INTERVAL_HOURS * 3_600_000;
+}

@@ -1,7 +1,7 @@
-import type { Candle, MarketSetup, Regime, Timeframe } from "../types";
+import type { Candle, MarketSetup, QualificationCheck, Regime, Timeframe } from "../types";
 import { INTERVAL_MS, MarketDataError, validateCandles } from "./binance";
 import { computeIndicators } from "./indicators";
-import { makeTradePlan } from "./risk";
+import { assessTradePlan, MAX_SETUP_RISK_PCT, MIN_SETUP_RISK_PCT } from "./risk";
 import { confirmedPivots, detectStructure } from "./structure";
 import { volumeIntelligence } from "./volume";
 
@@ -88,12 +88,32 @@ export function analyzeSymbol(input: SetupInput, timeframe: Timeframe = "1h"): M
   const pivots = confirmedPivots(baseCandles);
   const support = pivots.filter((pivot) => pivot.kind === "low" && pivot.index >= baseCandles.length - 40 && pivot.price < latest.close).at(-1)?.price
     ?? Math.min(...baseCandles.slice(-12).map((candle) => candle.low));
-  const candidatePlan = makeTradePlan({ price: latest.close, atr: base.atr, support, tickSize: input.tickSize, stepSize: input.stepSize, minNotional: input.minNotional });
-  const rejected = staleIntervals.length > 0 || illiquid || bearishContext || extremeVolatility || extended || !candidatePlan;
+  const assessment = assessTradePlan({ price: latest.close, atr: base.atr, support, tickSize: input.tickSize, stepSize: input.stepSize, minNotional: input.minNotional });
+  const candidatePlan = assessment.plan;
   const positiveMomentum = horizon.momentum.every(([interval]) => indicators[interval].macdHistogram > 0);
-  const ready = !rejected && higherAgreement && base.trend === "bullish" && currentConfirmation && aboveVwap
-    && base.rsi >= 45 && base.rsi <= 70 && positiveMomentum
-    && volume.relativeVolume >= 1.1 && volume.buyPressure >= 0.52 && score >= 78;
+  const riskDetail = assessment.riskPct === null ? "No valid positive, tick-rounded entry/stop/target configuration."
+    : candidatePlan ? `Planned loss ${assessment.riskPct.toFixed(2)}% includes fees/slippage; accepted range ${MIN_SETUP_RISK_PCT}–${MAX_SETUP_RISK_PCT}%.`
+      : assessment.reason === "risk_too_high" ? `Required stop risk ${assessment.riskPct.toFixed(2)}% exceeds ${MAX_SETUP_RISK_PCT}% after fees/slippage. Setup rejected at the published risk limit.`
+        : assessment.reason === "risk_too_low" ? `Required stop risk ${assessment.riskPct.toFixed(2)}% is below ${MIN_SETUP_RISK_PCT}%.`
+          : "Exchange tick rounding cannot produce distinct, correctly ordered targets.";
+  const trendStates = horizon.trends.map(([tf]) => `${tf.toUpperCase()} ${indicators[tf].trend}`).join(" / ");
+  const qualification: QualificationCheck[] = [
+    { id: "freshness", label: "Fresh closed candles", requiredFor: "plan", passed: !staleIntervals.length, detail: staleIntervals.length ? `Stale context: ${staleIntervals.join(", ")}.` : "Relevant closed-candle contexts are within their freshness limits." },
+    { id: "liquidity", label: "Liquidity floor", requiredFor: "plan", passed: !illiquid, detail: `24h quote volume ${(input.quoteVolume24h / 1e6).toFixed(2)}M USDT (minimum 5M); relative volume ${volume.relativeVolume.toFixed(2)}× (minimum 0.30×).` },
+    { id: "trend_safety", label: "No bearish required trend", requiredFor: "plan", passed: !bearishContext, detail: trendStates },
+    { id: "volatility", label: "Volatility limit", requiredFor: "plan", passed: !extremeVolatility, detail: `${label} ATR ${atrPct.toFixed(2)}% versus maximum 6%.` },
+    { id: "extension", label: "No overextension", requiredFor: "plan", passed: !extended, detail: `${label} RSI ${base.rsi.toFixed(1)} (maximum 78); distance above EMA21 ${((latest.close - base.ema21) / base.atr).toFixed(2)} ATR (maximum 3).` },
+    { id: "risk", label: "Valid cost-adjusted risk plan", requiredFor: "plan", passed: !!candidatePlan, detail: riskDetail },
+    { id: "alignment", label: "Bullish EMA agreement", requiredFor: "buy", passed: higherAgreement && base.trend === "bullish", detail: trendStates },
+    { id: "structure", label: "Fresh price confirmation", requiredFor: "buy", passed: currentConfirmation, detail: currentConfirmation ? `Bullish ${label} closed-candle structure or breakout confirmation is present.` : `Await a bullish ${label} candle with a recent confirmed structure break, sweep recovery or 20-bar breakout.` },
+    { id: "vwap", label: "Above session VWAP", requiredFor: "buy", passed: aboveVwap, detail: aboveVwap ? "Decision close is above the observed session VWAP." : "Decision close has not reclaimed the observed session VWAP." },
+    { id: "rsi", label: "Entry RSI range", requiredFor: "buy", passed: base.rsi >= 45 && base.rsi <= 70, detail: `${label} RSI ${base.rsi.toFixed(1)}; BUY requires 45–70.` },
+    { id: "momentum", label: "Positive MACD momentum", requiredFor: "buy", passed: positiveMomentum, detail: horizon.momentum.map(([tf]) => `${tf.toUpperCase()} ${indicators[tf].macdHistogram > 0 ? "positive" : "not positive"}`).join(" / ") },
+    { id: "participation", label: "Volume confirmation", requiredFor: "buy", passed: volume.relativeVolume >= 1.1 && volume.buyPressure >= .52, detail: `${label} relative volume ${volume.relativeVolume.toFixed(2)}× (requires 1.10×); taker-buy share ${(volume.buyPressure * 100).toFixed(2)}% (requires 52%).` },
+    { id: "score", label: "Technical score floor", requiredFor: "buy", passed: score >= 78, detail: `${score}/100 versus minimum 78; a passing score cannot override another failed check.` },
+  ];
+  const rejected = qualification.some(check => check.requiredFor === "plan" && !check.passed);
+  const ready = !rejected && qualification.every(check => check.passed);
   const action = ready ? "BUY" : !rejected && score >= 50 ? "WAIT" : "NO TRADE";
   const plan = action === "NO TRADE" ? null : candidatePlan;
   const reasons: string[] = [
@@ -108,7 +128,7 @@ export function analyzeSymbol(input: SetupInput, timeframe: Timeframe = "1h"): M
   if (bearishContext) reasons.push(`Rejected bearish ${label} decision or required higher timeframe: this strategy researches long spot positions only.`);
   if (extremeVolatility) reasons.push(`Rejected extreme ${label} volatility above 6% ATR.`);
   if (extended) reasons.push(`Rejected overextended ${label} price or RSI; wait for a measured pullback.`);
-  if (!candidatePlan) reasons.push("No valid structure/ATR stop within the 0.25–8% cost-adjusted risk bounds.");
+  if (!candidatePlan) reasons.push(`No valid structure/ATR plan. ${riskDetail}`);
   if (action === "WAIT") reasons.push(`Conditional ${label} plan: wait for relevant EMA trend alignment, a fresh bullish ${label} closed-candle structure confirmation, positive required MACD momentum, and sufficient ${label} taker-buy volume before entry.`);
   if (action === "BUY") reasons.push(`${label} trend context, current bullish confirmation, momentum and actual taker-buy volume agree; the entry remains a conditional spot limit plan.`);
   if (action === "NO TRADE" && !rejected) reasons.push("Rule agreement is too weak to publish a trade plan.");
@@ -125,7 +145,7 @@ export function analyzeSymbol(input: SetupInput, timeframe: Timeframe = "1h"): M
     `A new bearish closed ${trendLabel} EMA trend requires reassessment and prevents new ${label} long qualification. Published simulation entry, stop and targets stay fixed; trend changes do not trigger an automatic exit.`,
     `Unfilled ${label} recommendations expire ${horizon.expiresHours} hours after their decision candle; maximum simulated hold after entry is ${horizon.holdingHours} hours. Reassess after any data gap or exchange outage.`,
   ];
-  return { tickSize: input.tickSize, timeframe, holdingPeriodHours: horizon.holdingHours, id: `${input.symbol}-${timeframe}-${latest.closeTime}-${STRATEGY_VERSION}`, symbol: input.symbol, baseAsset: input.baseAsset, name: NAMES[input.baseAsset] ?? input.baseAsset,
+  return { qualification, tickSize: input.tickSize, timeframe, holdingPeriodHours: horizon.holdingHours, id: `${input.symbol}-${timeframe}-${latest.closeTime}-${STRATEGY_VERSION}`, symbol: input.symbol, baseAsset: input.baseAsset, name: NAMES[input.baseAsset] ?? input.baseAsset,
     price: latest.close, change24h: input.change24h, quoteVolume24h: input.quoteVolume24h, score, action, regime,
     asOf: new Date(latest.closeTime).toISOString(), expiresAt: new Date(latest.closeTime + horizon.expiresHours * INTERVAL_MS["1h"]).toISOString(), plan, indicators, reasons, confirmations, invalidations,
     structure: structure.slice(-16), volume, sparkline: baseCandles.slice(-48).map((candle) => candle.close) };

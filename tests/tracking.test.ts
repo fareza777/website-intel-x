@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceSignal, publishSignals, emptyState } from "../lib/tracking";
+import { advanceSignal, publishSignals, emptyState, hasCompleteSignalHistory } from "../lib/tracking";
 import type { Candle, MarketSetup, MarketSnapshot, TrackedSignal } from "../lib/types";
 
 function setup(): MarketSetup {
@@ -61,6 +61,29 @@ describe("published signal ledger", () => {
     expect(result.status).toBe("STOPPED");
     expect(result.exitFill).toBe(89.955);
     expect(result.realizedReturnPct).toBeLessThan(-10);
+  });
+  it("resolves a known opening TP3 before a later intrabar stop without crediting the favorable gap", () => {
+    const result = advanceSignal(pending(), [bar(2, 102, 105, 99, 101), bar(3, 121, 125, 94, 99)], Date.parse("2026-01-01T05:00:00Z"));
+    expect(result.status).toBe("TP3");
+    expect(result.highestTarget).toBe(3);
+    expect(result.exitFill).toBeCloseTo(119.94, 8);
+    expect(result.exitAt).toBe("2026-01-01T03:00:00.000Z");
+    expect(result.realizedReturnPct).toBeGreaterThan(19);
+  });
+  it("records targets already reached at the open before a later stop", () => {
+    const result = advanceSignal(pending(), [bar(2, 102, 105, 99, 101), bar(3, 116, 118, 94, 99)], Date.parse("2026-01-01T05:00:00Z"));
+    expect(result.status).toBe("STOPPED");
+    expect(result.highestTarget).toBe(2);
+    expect(result.events.find(e => e.type === "TP2")?.at).toBe("2026-01-01T03:00:00.000Z");
+  });
+  it("requires completed history before manual management but allows recovered gaps", () => {
+    const missing = advanceSignal(pending(), [bar(3, 102, 105, 99, 101)], Date.parse("2026-01-01T04:00:00Z"));
+    expect(hasCompleteSignalHistory(missing, Date.parse("2026-01-01T04:00:00Z"))).toBe(false);
+    expect(hasCompleteSignalHistory(pending(), Date.parse("2026-01-01T02:30:00Z"))).toBe(true);
+    expect(hasCompleteSignalHistory(pending(), Date.parse("2026-01-01T03:00:00Z"))).toBe(false);
+    const recovered = advanceSignal(missing, [bar(2, 102, 105, 99, 101), bar(3, 102, 105, 99, 101)], Date.parse("2026-01-01T04:00:00Z"));
+    expect(recovered.events.some(e => e.type === "DATA GAP")).toBe(true);
+    expect(hasCompleteSignalHistory(recovered, Date.parse("2026-01-01T04:00:00Z"))).toBe(true);
   });
   it("expires untouched entries after the original expiry", () => {
     const bars = Array.from({ length: 23 }, (_, i) => {

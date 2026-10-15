@@ -2,6 +2,7 @@ import type { MarketSetup, MarketSnapshot, Timeframe } from "../types";
 import { get24hTickers, getCandles, getExchangeSymbols, getExchangeTime, MarketDataError, marketSource, publicError } from "./binance";
 import { DEFAULT_COSTS } from "./risk";
 import { analyzeSymbol, MIN_QUOTE_VOLUME } from "./setup";
+import { compareOpportunities } from "../opportunities";
 
 // This asset classification list must be reviewed when Binance introduces new stablecoins.
 // United Stables (U): https://www.binance.com/en/support/announcement/detail/54de0a1147d04cf382707002a30901fd
@@ -27,7 +28,7 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number }
   const frames: Timeframe[] = ["1h", "4h", "1d"];
   const timeframes: Record<Timeframe, MarketSetup[]> = { "1h": [], "4h": [], "1d": [] };
   const snapshot = (): MarketSnapshot => {
-    for (const timeframe of frames) timeframes[timeframe].sort((a, b) => b.score - a.score || b.quoteVolume24h - a.quoteVolume24h || a.symbol.localeCompare(b.symbol));
+    for (const timeframe of frames) timeframes[timeframe].sort(compareOpportunities);
     const setups = timeframes["1h"];
     const available = Object.values(timeframes).flat();
     return { version: 1, generatedAt: new Date(now).toISOString(),

@@ -31,12 +31,17 @@ export function positionSize(plan: TradePlan, capital: number, riskPercent: numb
   return { quantity, notional: quantity * plan.entry, riskAmount, maxLoss: quantity * unitLoss };
 }
 
-export function makeTradePlan(input: { price: number; atr: number; support?: number; tickSize: number; stepSize: number; minNotional: number; feeBps?: number; slippageBps?: number }): TradePlan | null {
+export interface TradePlanInput { price: number; atr: number; support?: number; tickSize: number; stepSize: number; minNotional: number; feeBps?: number; slippageBps?: number }
+export interface TradePlanAssessment { plan: TradePlan | null; reason: "invalid_inputs" | "invalid_levels" | "risk_too_high" | "risk_too_low" | "invalid_targets" | null; riskPct: number | null }
+export const MIN_SETUP_RISK_PCT = .25;
+export const MAX_SETUP_RISK_PCT = 8;
+
+export function assessTradePlan(input: TradePlanInput): TradePlanAssessment {
   const { price, atr, support, tickSize, stepSize, minNotional } = input;
-  if (![price, atr, tickSize, stepSize, minNotional].every(Number.isFinite) || price <= 0 || atr <= 0 || tickSize <= 0 || stepSize <= 0 || minNotional < 0) return null;
+  if (![price, atr, tickSize, stepSize, minNotional].every(Number.isFinite) || price <= 0 || atr <= 0 || tickSize <= 0 || stepSize <= 0 || minNotional < 0) return { plan: null, reason: "invalid_inputs", riskPct: null };
   const feeBps = input.feeBps ?? DEFAULT_COSTS.feeBps;
   const slippageBps = input.slippageBps ?? DEFAULT_COSTS.slippageBps;
-  if (![feeBps, slippageBps].every(Number.isFinite) || feeBps < 0 || slippageBps < 0 || feeBps >= 10_000 || slippageBps >= 10_000) return null;
+  if (![feeBps, slippageBps].every(Number.isFinite) || feeBps < 0 || slippageBps < 0 || feeBps >= 10_000 || slippageBps >= 10_000) return { plan: null, reason: "invalid_inputs", riskPct: null };
   const entry = roundToStep(price - atr * 0.1, tickSize);
   const structuralStop = support !== undefined && Number.isFinite(support) && support < entry ? support - atr * 0.25 : entry - atr * 1.5;
   const stopLoss = roundToStep(Math.min(entry - atr * 1.5, structuralStop), tickSize);
@@ -45,11 +50,15 @@ export function makeTradePlan(input: { price: number; atr: number; support?: num
   const unitDebit = entry * debit;
   const unitLoss = unitDebit - stopLoss * credit;
   const riskPct = unitLoss / unitDebit * 100;
-  if (stopLoss <= 0 || entryZone[0] <= stopLoss || entry <= 0 || riskPct > 8 || riskPct < 0.25) return null;
+  if (stopLoss <= 0 || entryZone[0] <= stopLoss || entry <= 0 || !Number.isFinite(riskPct)) return { plan: null, reason: "invalid_levels", riskPct: null };
+  if (riskPct > MAX_SETUP_RISK_PCT) return { plan: null, reason: "risk_too_high", riskPct };
+  if (riskPct < MIN_SETUP_RISK_PCT) return { plan: null, reason: "risk_too_low", riskPct };
   const targets = [2, 3, 4].map((multiple) => {
     const target = roundToStep((unitDebit + multiple * unitLoss) / credit, tickSize, "up");
     return { price: target, rr: (target * credit - unitDebit) / unitLoss, gainPct: (target * credit - unitDebit) / unitDebit * 100 };
   });
-  if (targets[0].price <= entry || targets.some((target, index) => index > 0 && target.price <= targets[index - 1].price)) return null;
-  return { entry, entryZone, stopLoss, targets, riskPct, feeBps, slippageBps, tickSize, stepSize, minNotional };
+  if (targets[0].price <= entry || targets.some((target, index) => index > 0 && target.price <= targets[index - 1].price)) return { plan: null, reason: "invalid_targets", riskPct };
+  return { plan: { entry, entryZone, stopLoss, targets, riskPct, feeBps, slippageBps, tickSize, stepSize, minNotional }, reason: null, riskPct };
 }
+
+export function makeTradePlan(input: TradePlanInput): TradePlan | null { return assessTradePlan(input).plan; }

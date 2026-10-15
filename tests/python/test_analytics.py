@@ -114,6 +114,15 @@ class AnalyticsTests(unittest.TestCase):
         self.assertAlmostEqual(result.trades[0].net_return, expected_cash / 1000 - 1)
         self.assertLess(result.final_equity, 1000)
 
+    def test_known_opening_target_precedes_a_later_intrabar_stop(self):
+        core, _, _ = self.api()
+        bars = [self.candle(0), self.candle(1),
+                self.candle(2, 99, open_price=121, high=125, low=94), self.candle(3)]
+        result = core.simulate(bars, self.decisions(4, stop=95, target=120), 1, 4)
+        self.assertEqual(result.trades[0].reason, "TARGET GAP")
+        self.assertAlmostEqual(result.trades[0].exit_fill, 119.94)
+        self.assertGreater(result.trades[0].net_return, .19)
+
     def test_gap_through_stop_uses_lower_open_and_adverse_slippage(self):
         core, _, _ = self.api()
         bars = [self.candle(0), self.candle(1), self.candle(2, 80), self.candle(3, 80)]

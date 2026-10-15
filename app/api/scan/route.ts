@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { cachedScan } from "@/lib/server-market";
 import { symbolSchema } from "@/lib/validation";
+import { isSameOriginRequest } from "@/lib/request-origin";
 export const maxDuration = 60;
 const schema = z.object({ symbols: z.array(symbolSchema).min(1).max(50).optional(), limit: z.number().int().min(20).max(50).default(30) });
 let lastRequest = 0;
 export async function POST(request: Request) {
-  const origin = request.headers.get("origin");
-  try { if (origin && new URL(origin).host !== new URL(request.url).host) throw new Error("origin"); }
-  catch { return NextResponse.json({ error: "Cross-origin scan requests are not accepted." }, { status: 403 }); }
+  if (!isSameOriginRequest(request)) return NextResponse.json({ error: "Cross-origin scan requests are not accepted." }, { status: 403 });
   if (Number(request.headers.get("content-length")) > 8000) return NextResponse.json({ error: "Request too large." }, { status: 413 });
   const body = await request.text();
   if (body.length > 8000) return NextResponse.json({ error: "Request too large." }, { status: 413 });

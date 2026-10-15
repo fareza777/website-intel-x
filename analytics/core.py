@@ -146,6 +146,8 @@ def simulate(candles: list[Candle], decisions: list[Decision], start: int, end: 
         if position is not None:
             if candle.open <= position["stop"]:
                 exit_price, reason = candle.open, "STOP GAP"
+            elif candle.open >= position["target"]:
+                exit_price, reason = position["target"], "TARGET GAP"
             elif i == end - 1:
                 exit_price, reason = candle.open, "FOLD END"
             elif previous.exit:

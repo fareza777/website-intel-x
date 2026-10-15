@@ -1,5 +1,50 @@
 @import "tailwindcss";
 
+.eligibility-overview { margin: 0 0 25px; padding: 20px; border: 1px solid #303e55; border-radius: 10px; background: #111a28; }
+.eligibility-heading { display: flex; justify-content: space-between; gap: 15px; margin-bottom: 15px; align-items: center; }
+.eligibility-heading > strong { font-size: 19px; color: #dae5f8; }
+.eligibility-heading > span { font-size: 14px; color: #a7b6d0; }
+.eligibility-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.eligibility-counts > button { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 3px 13px; text-align: left; padding: 14px 16px; border: 1px solid #354764; border-radius: 8px; background: #16243a; transition: border-color .2s, background .2s; min-width: 0; }
+.eligibility-counts > button:hover { border-color: #87abeb; background: #1d2d45; }
+.eligibility-counts strong { font-size: 29px; line-height: 1.2; color: #b4ceff; grid-row: span 2; }
+.eligibility-counts span { font-size: 15px; font-weight: 650; color: #d4e2fa; }
+.eligibility-counts small { font-size: 14px; color: #aebed7; }
+.eligibility-counts .conditional { border-color: #665138; background: #2a241d; }
+.eligibility-counts .conditional strong { color: #e3bc84; }
+.eligibility-counts .rejected { border-color: #59404c; background: #251e29; }
+.eligibility-counts .rejected strong { color: #e8a0b2; }
+.eligibility-overview > p { margin-top: 15px; font-size: 15px; line-height: 1.8; color: #b8c6dc; }
+.qualification-summary { grid-column: 1 / -1; min-width: 0; margin: 0 18px 19px; }
+.decision-explanation { padding: 14px; border: 1px solid #3e506d; border-radius: 7px; background: #172338; }
+.decision-explanation > strong { font-size: 15px; color: #c2d7ff; }
+.decision-explanation > p { font-size: 14px; line-height: 1.8; color: #c4cfe0; margin: 7px 0 0; overflow-wrap: anywhere; }
+.decision-explanation.rejected { border-color: #674555; background: #291e29; }
+.decision-explanation.rejected > strong { color: #efb3c3; }
+.decision-explanation.conditional { border-color: #6a5538; background: #2a251e; }
+.decision-explanation.conditional > strong { color: #edc58f; }
+.qualification-checklist { margin-top: 14px; }
+.qualification-checklist > summary { cursor: pointer; font-size: 14px; line-height: 1.8; color: #bdd1f3; padding: 3px 0; }
+.qualification-checklist > div { margin-top: 11px; border-top: 1px solid #344159; }
+.qualification-check { display: flex; gap: 9px; padding: 12px 0; border-bottom: 1px solid #29364a; color: #a8c6fb; align-items: flex-start; }
+.qualification-check > svg { flex-shrink: 0; margin-top: 3px; }
+.qualification-check > div { flex: 1; min-width: 0; }
+.qualification-check strong { display: flex; justify-content: space-between; gap: 9px; font-size: 14px; font-weight: 550; line-height: 1.7; }
+.qualification-check strong > span { font-size: 12px; letter-spacing: .04em; }
+.qualification-check p { font-size: 14px; line-height: 1.8; color: #adbed9; margin-top: 4px; overflow-wrap: anywhere; }
+.qualification-check.blocked { color: #e5a2b6; }
+.qualification-check.pending { color: #e7bf86; }
+.opportunity-blocker { font-size: 14px; line-height: 1.7; color: #e7b8c7; margin-top: 15px; }
+.research-scope-note { padding: 16px 19px; border: 1px solid #3c4d68; border-radius: 9px; background: #151e2c; color: #bacbe3; font-size: 15px; line-height: 1.8; }
+@media (max-width: 600px) {
+  .eligibility-overview { padding: 17px 14px; }
+  .eligibility-heading { flex-wrap: wrap; gap: 6px; }
+  .eligibility-counts { gap: 8px; }
+  .eligibility-counts > button { display: flex; flex-direction: column; align-items: flex-start; padding: 12px 9px; gap: 5px; }
+  .eligibility-counts small { font-size: 13px; line-height: 1.5; }
+  .eligibility-counts span { font-size: 13px; }
+}
+
 .update-policy { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: -7px 0 23px; color: #acb9ce; font-size: 14px; line-height: 1.7; }
 .update-policy > span:first-child { color: #a9c5ff; display: flex; gap: 8px; align-items: center; }
 .update-policy i { width: 7px; height: 7px; border-radius: 50%; background: #79a7ff; }

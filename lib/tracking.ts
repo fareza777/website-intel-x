@@ -29,6 +29,15 @@ export function publishSignals(state: StoredState, snapshot: MarketSnapshot, pub
 
 export function uniqueEvents(events: SignalEvent[]): SignalEvent[] { return [...new Map(events.map(e => [e.id, e])).values()]; }
 
+/** Manual management requires every eligible, fully closed hour; recovered gaps can pass. */
+export function hasCompleteSignalHistory(signal: TrackedSignal, now: number): boolean {
+  if (!Number.isFinite(now)) return false;
+  if (!activeStatuses.has(signal.status)) return true;
+  const first = Math.ceil(Date.parse(signal.publishedAt) / 3_600_000) * 3_600_000;
+  const latestClosedOpen = Math.floor(now / 3_600_000) * 3_600_000 - 3_600_000;
+  return Number.isFinite(first) && (latestClosedOpen < first || signal.lastEvaluatedTime >= latestClosedOpen);
+}
+
 export function advanceSignal(original: TrackedSignal, candles: Candle[], now: number): TrackedSignal {
   const signal = structuredClone(original);
   const plan = signal.setup.plan;
@@ -47,6 +56,14 @@ export function advanceSignal(original: TrackedSignal, candles: Candle[], now: n
     signal.status = stopped ? "STOPPED" : signal.highestTarget === 3 ? "TP3" : "CLOSED";
     signal.realizedReturnPct = ((signal.exitFill * (1 - fee)) / (signal.entryFill! * (1 + fee)) - 1) * 100;
     event(stopped ? "STOPPED" : "EXIT", at, signal.exitFill, stopped ? "Conservative stop-first fill; gap opens and exit costs included." : "Full position exited; both-side fees and slippage included.");
+  }
+  function markTargets(price: number, at: number) {
+    for (let i = signal.highestTarget; i < plan!.targets.length; i++) {
+      if (price < plan!.targets[i].price) break;
+      signal.highestTarget = i + 1;
+      signal.status = `TP${i + 1}` as TrackedSignal["status"];
+      event(`TP${i + 1}`, at, plan!.targets[i].price, `Target ${i + 1} touched. Full position stays open until TP3, stop, or the ${holdingHours}-hour time exit.`);
+    }
   }
   const sorted = [...candles].sort((a, b) => a.time - b.time);
   for (const candle of sorted) {
@@ -75,16 +92,17 @@ export function advanceSignal(original: TrackedSignal, candles: Candle[], now: n
         // A target may precede the entry within this bar; never award it.
       }
     } else {
-      if (candle.open <= plan.stopLoss || candle.low <= plan.stopLoss) exit(Math.min(candle.open, plan.stopLoss), candle.open <= plan.stopLoss ? openTime : candle.closeTime, true);
+      if (candle.open <= plan.stopLoss) exit(candle.open, openTime, true);
       else {
-        for (let i = signal.highestTarget; i < plan.targets.length; i++) {
-          if (candle.high < plan.targets[i].price) break;
-          signal.highestTarget = i + 1;
-          signal.status = `TP${i + 1}` as TrackedSignal["status"];
-          event(`TP${i + 1}`, candle.closeTime, plan.targets[i].price, `Target ${i + 1} touched. Full position stays open until TP3, stop, or the ${holdingHours}-hour time exit.`);
+        // The opening price is known to precede both intrabar extremes.
+        markTargets(candle.open, openTime);
+        if (signal.highestTarget === 3) exit(plan.targets[2].price, openTime, false);
+        else if (candle.low <= plan.stopLoss) exit(plan.stopLoss, candle.closeTime, true);
+        else {
+          markTargets(candle.high, candle.closeTime);
+          if (signal.highestTarget === 3) exit(plan.targets[2].price, candle.closeTime, false);
+          else if (candle.closeTime + 1 - Date.parse(signal.enteredAt) >= holdingHours * 3_600_000) exit(candle.close, candle.closeTime, false);
         }
-        if (signal.highestTarget === 3) exit(plan.targets[2].price, candle.closeTime, false);
-        else if (candle.closeTime + 1 - Date.parse(signal.enteredAt) >= holdingHours * 3_600_000) exit(candle.close, candle.closeTime, false);
       }
     }
     if (!activeStatuses.has(signal.status)) break;

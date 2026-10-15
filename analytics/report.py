@@ -26,6 +26,7 @@ def build_report(symbol: str, hourly: list[Candle], higher: list[Candle], *,
         raise MarketDataError("4H history does not cover the evaluation start")
     folds = walk_forward_folds(len(hourly))
     notes = [
+        "Evaluation scope: two fixed baseline strategies. Scanner recommendations are evaluated separately in the immutable signal ledger; technical setup scores are not calibrated win probabilities.",
         "Real closed Binance spot 1H/4H OHLCV; no fabricated history or trade execution.",
         "Two fixed rules; no parameter optimization. 200 hourly bars warm up indicators; "
         "the next half initializes training, then three expanding-train / disjoint-test folds run chronologically.",
@@ -36,8 +37,9 @@ def build_report(symbol: str, hourly: list[Candle], higher: list[Candle], *,
         "Decisions use close t and only 4H candles closed by t; entries and signal exits use open t+1. "
         "Fee 10 bps plus adverse slippage 5 bps on each side. One unlevered position, all available cash, "
         "fractional quantities; exchange lot/tick rounding and capacity are not modeled.",
-        "Stop-first for ambiguous OHLC; gap-through stops use the worse open. No target fill on an entry bar. "
-        "Stops remain active. Targets receive no favorable gap fill. Maximum hold 72 hours; "
+        "Known opening stop/target events resolve before later intrabar extremes. Otherwise stop-first for ambiguous OHLC; "
+        "gap-through stops use the worse open, while favorable target gaps fill at the fixed target. "
+        "No target fill on an entry bar. Stops remain active. Maximum hold 72 hours; "
         "predeclared fold boundaries flatten at the final bar open with both exit costs.",
         "Drawdown uses hourly equity including estimated liquidation costs, not an intrabar worst-case path. "
         "No fees for idle cash, funding, shorting, leverage, tax or liquidity impact beyond fixed slippage.",

@@ -33,6 +33,22 @@ function input(): SetupInput {
 }
 
 describe("independent causal setup horizons", () => {
+  it.each(horizons)("can qualify BUY on %s when every required condition is present", (timeframe) => {
+    const source = input();
+    for (const interval of horizons) {
+      source.candles[interval] = source.candles[interval].map((candle, index) => {
+        const close = 100 + index * .1 + Math.sin(index * .8) + (interval === timeframe ? 0 : Math.max(0, index - 250) ** 2 * .01);
+        return { ...candle, open: close - .2, high: close + .5, low: close - .5, close, volume: 1000, quoteVolume: close * 1000, takerBuyVolume: 550 };
+      });
+    }
+    const latest = source.candles[timeframe].at(-1)!;
+    const close = latest.close + 1.2;
+    Object.assign(latest, { close, open: close - 1.1, high: close + .2, low: close - 1.5, volume: 1500, takerBuyVolume: 1050, quoteVolume: (close - .25) * 1500 });
+    const result = analyzeSymbol(source, timeframe);
+    expect(result.action).toBe("BUY");
+    expect(result.qualification?.every(check => check.passed)).toBe(true);
+    expect(result.plan!.riskPct).toBeLessThanOrEqual(8);
+  });
   it("derives price, score, ATR stop and identity from each selected horizon", () => {
     const source = input();
     const results = horizons.map((timeframe) => analyzeSymbol(source, timeframe));

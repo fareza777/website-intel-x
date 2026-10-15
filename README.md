@@ -64,9 +64,10 @@ Set `SCAN_SYMBOLS` to a comma/space-separated list of one to fifty USDT markets,
 
 - Market cards, radar prices and the workspace price use a separate Binance quote checked every **30 seconds** while visible. Unavailable or old quotes show no current price. Closed charts check for new completed candles every minute; an hourly/daily candle changes only after it closes. The research reference price is the **last closed candle's close at the recommendation scan**, identified by `asOf`. Setup scores, daily change and daily volume remain tied to that scan; plans and archived outcomes are never rewritten by quote updates.
 - The 1H, 4H and 1D views have separate recommendation scores, causal structure, volume windows, ATR stops and target plans. They reuse the same three downloaded datasets, rather than multiplying exchange requests. SMA-seeded EMA, Wilder RSI/ATR and MACD remain causal; pivots require right-side confirmation. A score measures rule agreement, **not win probability**.
+- Markets sort by BUY, WAIT, then NO TRADE before technical quality. Each new setup publishes its safety and entry checklist, including the actual cost-adjusted stop risk when a plan is rejected. High technical scores cannot override a failed risk, liquidity, trend or volatility check. Missing or more than two-hour-old scan timestamps are stale under the hourly schedule.
 - Costs default to **ten basis points fee and five basis points adverse slippage on each side**. Targets and sizing include both entry and exit costs, capital limits, lot steps and minimum notional. These are research assumptions, not a complete exchange order validator.
 - Session VWAP uses reported quote/base totals. Candle-distributed profiles and POC approximate traded volume at price. Order blocks, FVGs and sweeps are price-action heuristics, not proof of institutional activity.
-- Published levels stay fixed. All horizons evaluate fills using subsequent full hourly bars; the candle already underway at publication is ignored. Stops win ambiguous stop/target bars, adverse stop gaps are included, and a new limit fill receives no same-bar target credit. TP1/TP2 are milestones; the full exit is TP3, stop or the configured horizon's holding limit. Unfilled originals expire at their fixed expiry after sufficient candle coverage. Missing history pauses evaluation instead of inventing an outcome.
+- Published levels stay fixed. All horizons evaluate fills using subsequent full hourly bars; the candle already underway at publication is ignored. For an already-open position, known opening stop/target events are resolved before subsequent intrabar events; favorable target gaps fill at the fixed target, and adverse stop gaps include the worse opening price. Stops win otherwise ambiguous stop/target bars, and a new limit fill receives no same-bar target credit. TP1/TP2 are milestones; the full exit is TP3, stop or the configured horizon's holding limit. Unfilled originals expire at their fixed expiry after sufficient candle coverage. Missing history pauses evaluation and blocks manual cancellation/exit until every eligible completed hour is reconciled.
 
 | Research horizon | Unfilled expiry | Maximum open holding period |
 | --- | --- | --- |
@@ -77,6 +78,8 @@ Set `SCAN_SYMBOLS` to a comma/space-separated list of one to fifty USDT markets,
 Each asset/horizon retains its own original, so a daily position does not silently replace an hourly thesis. Older state without a timeframe continues to mean 1H; `snapshot.setups` remains the 1H compatibility view.
 
 Higher-timeframe changes require reassessment and affect qualification of new research; they do not move an original's levels or automatically exit an existing simulation. See [operations and recovery](docs/operations.md) for the lifecycle, publication timing and outage behavior.
+
+The [2026-10-15 accuracy audit](docs/accuracy-audit-2026-10-15.md) documents real-market qualification counts, independent indicator comparisons, regression coverage and the limits of the performance evidence.
 
 ## Durable data and retention
 

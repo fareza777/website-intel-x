@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { applyPaperUpdates, createPaperAccount, importPaperAccount, reservePosition, reconcilePosition, settlePaperPosition } from "../lib/paper";
+import { advanceSignal } from "../lib/tracking";
 import type { MarketSetup, TrackedSignal } from "../lib/types";
 const indicator = { ema21: 100, ema50: 98, ema200: 90, rsi: 55, macd: 1, macdSignal: .5, macdHistogram: .5, atr: 2, trend: "bullish" as const };
 const setup: MarketSetup = { id: "test", symbol: "BTCUSDT", baseAsset: "BTC", name: "Bitcoin", price: 100, change24h: 2, quoteVolume24h: 1e9, score: 90, action: "BUY", regime: "BULLISH", asOf: "2026-01-01T00:00:00Z", expiresAt: "2099-01-01T00:00:00Z", indicators: { "1h": indicator, "4h": indicator, "1d": indicator }, reasons: [], confirmations: [], invalidations: [], structure: [], volume: { vwap: 100, poc: 100, relativeVolume: 1, buyPressure: .6, profile: [] }, sparkline: [], plan: { entry: 100, entryZone: [99, 101], stopLoss: 95, targets: [{ price: 110, rr: 2, gainPct: 10 }, { price: 115, rr: 3, gainPct: 15 }, { price: 120, rr: 4, gainPct: 20 }], feeBps: 10, slippageBps: 5, riskPct: 5, tickSize: .01, stepSize: .001, minNotional: 5 } };
@@ -77,11 +78,24 @@ it("returns pending virtual cash on a manual cancellation without inventing a tr
 });
 it("closes a virtual position at a fresh quote with exact exit fees and slippage", () => {
   const account = reservePosition(createPaperAccount(1000), setup, 1, "2026-01-01T00:00:00Z");
-  const opened = { ...account.positions[0].signal, status: "OPEN", enteredAt: "2026-01-01T01:00:00Z", entryFill: 100.05 } as TrackedSignal;
+  const opened = { ...account.positions[0].signal, status: "OPEN", enteredAt: "2026-01-01T01:00:00Z", entryFill: 100.05, lastEvaluatedTime: Date.parse("2026-01-01T01:00:00Z") } as TrackedSignal;
   const active = reconcilePosition(account, 0, opened);
   const closed = settlePaperPosition(active, setup.id, "2026-01-01T00:00:00Z", { kind: "close", quote: { symbol: "BTCUSDT", price: 110, asOf: "2026-01-01T02:00:00Z" } }, "2026-01-01T02:00:30Z");
   expect(closed.positions[0].signal.exitFill).toBeCloseTo(109.945, 8);
   expect(closed.cash).toBeCloseTo(1000 + active.positions[0].quantity * (109.945 * .999 - 100.05 * 1.001), 8);
   expect(importPaperAccount(JSON.stringify(closed)).positions[0].settled).toBe(true);
   expect(() => settlePaperPosition(active, setup.id, "2026-01-01T00:00:00Z", { kind: "close", quote: { symbol: "BTCUSDT", price: 110, asOf: "2026-01-01T01:00:00Z" } }, "2026-01-01T02:00:30Z")).toThrow(/fresh/i);
+});
+it("blocks manual refunds until missing completed history is recovered", () => {
+  const at = "2026-01-01T02:30:00Z";
+  const account = reservePosition(createPaperAccount(1000), setup, 1, "2026-01-01T00:00:00Z");
+  expect(() => settlePaperPosition(account, setup.id, "2026-01-01T00:00:00Z", { kind: "cancel" }, at)).toThrow(/history/i);
+  const bars = [0, 1].map(hour => {
+    const time = Date.parse("2026-01-01T00:00:00Z") + hour * 3_600_000;
+    return { time, closeTime: time + 3_599_999, open: 105, high: 108, low: 102, close: 106, volume: 100, quoteVolume: 10600, takerBuyVolume: 50 };
+  });
+  const caughtUp = reconcilePosition(account, 0, advanceSignal(account.positions[0].signal, bars, Date.parse(at)));
+  const cancelled = settlePaperPosition(caughtUp, setup.id, "2026-01-01T00:00:00Z", { kind: "cancel" }, at);
+  expect(cancelled.cash).toBe(1000);
+  expect(account.positions[0].settled).toBe(false);
 });

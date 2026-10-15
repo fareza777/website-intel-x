@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Candle, Timeframe, TradePlan } from "../lib/types";
-import { makeTradePlan, positionSize } from "../lib/market/risk";
+import { assessTradePlan, makeTradePlan, positionSize } from "../lib/market/risk";
 import { analyzeSymbol } from "../lib/market/setup";
 
 const hour = 3_600_000;
@@ -17,6 +17,13 @@ function series(interval: Timeframe, end: number, bearish = false): Candle[] {
 }
 
 describe("cost-aware spot position sizing", () => {
+  it("explains an excessive structural stop without publishing a weaker substitute", () => {
+    const assessment = assessTradePlan({ price: 100, atr: 2, support: 89, tickSize: .01, stepSize: .001, minNotional: 5 });
+    expect(assessment.plan).toBeNull();
+    expect(assessment.reason).toBe("risk_too_high");
+    expect(assessment.riskPct).toBeGreaterThan(8);
+    expect(makeTradePlan({ price: 100, atr: 2, support: 89, tickSize: .01, stepSize: .001, minNotional: 5 })).toBeNull();
+  });
   it("includes fees and slippage on both sides before rounding down the lot", () => {
     const sized = positionSize(plan, 1_000, 1);
     // Per-unit loss = 100*1.0005*1.001 - 95*.9995*.999 = 5.2925025.

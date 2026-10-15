@@ -44,6 +44,8 @@ export interface VolumeIntelligence {
   profile: { price: number; volume: number }[];
 }
 export interface MarketSetup {
+  /** Observed rule checks, frozen with the research; older originals may omit them. */
+  qualification?: QualificationCheck[];
   /** Exchange tick size is retained even when no executable trade plan qualifies. */
   tickSize?: number;
   /** The decision horizon; legacy records without this field are 1H research. */
@@ -70,6 +72,13 @@ export interface MarketSetup {
   structure: StructureEvent[];
   volume: VolumeIntelligence;
   sparkline: number[];
+}
+export interface QualificationCheck {
+  id: string;
+  label: string;
+  requiredFor: "plan" | "buy";
+  passed: boolean;
+  detail: string;
 }
 export interface MarketSnapshot {
   version: 1;
