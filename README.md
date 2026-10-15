@@ -27,7 +27,7 @@ npm run scan -- --publish
 npm run dev
 ```
 
-Open the address printed by Next.js, normally `http://localhost:3000`. The explicit local `--publish` command seeds ignored `data/state.json` and its local recommendation ledger from real data. The server reads this local state during development. A failed download produces an unavailable state; no sample market data is substituted.
+Open the address printed by Next.js, normally `http://localhost:3000`. The explicit local `--publish` command seeds ignored `data/state.json` and its local recommendation ledger from real data. During development, the server selects the newer trusted publication from this local state and the shared GitHub data branch. A failed download produces an unavailable state; no sample market data is substituted.
 
 Next.js reads `.env.local` automatically. Standalone CLI commands read the process environment; to load that file explicitly, use `node --env-file=.env.local --import tsx scripts/scan.ts --publish`. Copying the example does not configure any secrets.
 
@@ -46,7 +46,7 @@ Install `requirements-analytics.txt` only when the optional research adapters ar
 
 The browser's Scan button and `npm run scan` create previews. CLI previews go to ignored `data/preview.json`; they do not create official historical recommendations. `npm run scan -- --publish` updates the local immutable ledger. It becomes the shared official ledger only when a trusted publisher saves that state to the dedicated `market-data` branch.
 
-The scheduled [publisher workflow](.github/workflows/market-data.yml) runs at minute seventeen every four UTC hours and also supports manual dispatch. It restores the previous public data branch, optionally refreshes daily analytics, advances existing originals using subsequent closed hourly candles, publishes new qualified BUY and conditional WAIT research, then saves the result back to the data branch. WAIT originals never enter a simulated position; a later qualified BUY is a separate original. The publisher serializes runs with `cancel-in-progress: false` and uses the workflow's limited `GITHUB_TOKEN`, not a personal access token.
+The scheduled [publisher workflow](.github/workflows/market-data.yml) runs at minute seventeen every UTC hour and also supports manual dispatch. GitHub runner start times can be delayed. It restores the previous public data branch, optionally refreshes daily analytics, advances existing originals using subsequent closed hourly candles, publishes new qualified BUY and conditional WAIT research, then saves the result back to the data branch. WAIT originals never enter a simulated position; a later qualified BUY is a separate original. The publisher serializes runs with `cancel-in-progress: false` and uses the workflow's limited `GITHUB_TOKEN`, not a personal access token.
 
 For an explicit manual remote publication from an authenticated local clone:
 

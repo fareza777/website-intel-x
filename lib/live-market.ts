@@ -1,6 +1,7 @@
 import type { SpotQuote } from "./types";
 
-export const SCAN_INTERVAL_HOURS = 4;
+export const SCAN_INTERVAL_HOURS = 1;
+export const SCAN_CADENCE = SCAN_INTERVAL_HOURS === 1 ? "hour" : `${SCAN_INTERVAL_HOURS} hours`;
 export const SCAN_MINUTE = 17;
 export const QUOTE_REFRESH_MS = 30_000;
 export const CANDLE_REFRESH_MS = 60_000;

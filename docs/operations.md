@@ -34,7 +34,7 @@ If the helper reports that the remote branch advanced, run restore and the scann
 
 ## Daily analytics
 
-The publisher checks UTC calendar days using both the report generation time and `analytics-attempt.json`. It marks an attempt before installing optional adapters or downloading data, so an ordinary failed daily attempt is not repeated on every four-hour scan. Manual dispatch's analytics checkbox forces an explicit retry. A manual core-only run remains available:
+The publisher checks UTC calendar days using both the report generation time and `analytics-attempt.json`. It marks an attempt before installing optional adapters or downloading data, so an ordinary failed daily attempt is not repeated on every hourly scan. Manual dispatch's analytics checkbox forces an explicit retry. A manual core-only run remains available:
 
 ```powershell
 python -m analytics.run --symbol BTCUSDT --limit 1000 --output data/analytics.json --no-optional

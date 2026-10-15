@@ -31,12 +31,13 @@ describe("live prices are separate from frozen research", () => {
 
 describe("scheduled recommendation scans", () => {
   it("shows the next UTC cron slot, including midnight rollover", () => {
-    expect(nextScheduledScan(now).toISOString()).toBe("2026-10-15T16:17:00.000Z");
+    expect(nextScheduledScan(now).toISOString()).toBe("2026-10-15T14:17:00.000Z");
     expect(nextScheduledScan(Date.parse("2026-10-15T23:59:00Z")).toISOString()).toBe("2026-10-16T00:17:00.000Z");
-    expect(nextScheduledScan(Date.parse("2026-10-15T16:17:00Z")).toISOString()).toBe("2026-10-15T20:17:00.000Z");
+    expect(nextScheduledScan(Date.parse("2026-10-15T16:17:00Z")).toISOString()).toBe("2026-10-15T17:17:00.000Z");
   });
   it("matches the real GitHub Actions schedule", () => {
     const workflow = readFileSync(new URL("../.github/workflows/market-data.yml", import.meta.url), "utf8");
-    expect(workflow).toContain(`cron: '17 */${SCAN_INTERVAL_HOURS} * * *'`);
+    expect(SCAN_INTERVAL_HOURS).toBe(1);
+    expect(workflow).toContain("cron: '17 * * * *'");
   });
 });

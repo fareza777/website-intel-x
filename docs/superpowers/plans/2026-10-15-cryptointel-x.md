@@ -20,7 +20,7 @@ Files: lib/market/*, tests/market*.test.ts. Contract: lib/types.ts MarketSnapsho
 Files: analytics/*, tests/python/*, docs/open-source-audit.md. Contract: AnalyticsReport JSON from lib/types.ts. Research licenses and causal limitations from upstream. Write failing tests for cost-aware stop-first simulation and chronological splits. Implement live-only download, walk-forward comparisons and optional Ruptures/River/QuantStats adapters. Execute tests and an actual report.
 
 ## Task 3: Outcomes and publication
-Files: lib/tracking.ts, lib/storage.ts, scripts/scan.ts, .github/workflows/*, tests/tracking.test.ts. Contract: StoredState. Test immutable publication, deduplication, post-publication fills, gap stops, expiration, and partial targets. Persist local state atomically and small state files on the separate market-data branch. CI verifies code and scans every 4h.
+Files: lib/tracking.ts, lib/storage.ts, scripts/scan.ts, .github/workflows/*, tests/tracking.test.ts. Contract: StoredState. Test immutable publication, deduplication, post-publication fills, gap stops, expiration, and partial targets. Persist local state atomically and small state files on the separate market-data branch. CI verifies code and scans every hour.
 
 ## Task 4: Terminal and browser paper portfolio
 Files: app/*, components/*, lib/paper.ts, tests/paper.test.ts. Show real scan, search/sort/watchlist, chart intervals/overlays, research panel, sizing, autopsy, liquidity and volume, report results, local paper portfolio/journal and alerts. Test sizing and portfolio cash conservation. Verify loading/error/empty states and mobile navigation.
