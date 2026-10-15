@@ -2,7 +2,7 @@
 
 ## Checks completed
 
-- TypeScript: **157 tests across 20 files passed**. Coverage includes candle percentages, causal indicator prefixes, preferences validation, independent horizons, 15M publication/execution, missing execution bars, paper-account round-trip/freshness, exact costs, rejected risk explanations, replay chronology, expiry refunds, future append invariance, execution-feed equity marks, compact evidence validation and dedicated-branch persistence.
+- TypeScript: **158 tests across 20 files passed**. Coverage includes candle percentages, causal indicator prefixes, preferences validation, independent horizons, 15M publication/execution, missing execution bars, paper-account round-trip/freshness, exact costs, rejected risk explanations, replay chronology, expiry refunds, future append invariance, execution-feed equity marks, compact evidence validation and dedicated-branch persistence.
 - Python: **34 tests passed**, including optional indicator/analytics checks.
 - ESLint: no errors or warnings. `tsc --noEmit`: passed. Optimized Next.js build: passed.
 - Both GitHub workflow YAML files parsed successfully; no duplicate step keys. `git diff --check` passed.

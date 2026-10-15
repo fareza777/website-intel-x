@@ -58,7 +58,7 @@ export function explainDecision(setup: MarketSetup) {
   if (setup.action === "NO TRADE") return { title: "Rencana belum memenuhi syarat strategi", summary: "Publikasi ini ditolak oleh aturan keselamatan atau kelayakan rencana. Rekaman lama belum menyertakan checklist terstruktur; alasan aslinya tersedia pada rincian setup. Skor tinggi tetap tidak menggantikan pemeriksaan tersebut." };
   if (setup.action === "WAIT") {
     const missing = setup.qualification?.filter(c => !c.passed && c.requiredFor === "buy").slice(0, 2).map(c => explainCheck(c, setup).label) ?? [];
-    return { title: "Pantau dulu, konfirmasi belum lengkap", summary: missing.length ? `${missing.join("; ")}. Rencana WAIT belum dapat diambil sebagai trade virtual.` : "Tunggu tren, momentum, struktur dan volume memenuhi seluruh aturan BUY pada scan baru." };
+    return { title: "Pantau dulu, konfirmasi belum lengkap", summary: missing.length ? `Syarat yang belum terpenuhi: ${missing.join("; ")}. Rencana WAIT belum dapat diambil sebagai trade virtual.` : "Tunggu tren, momentum, struktur dan volume memenuhi seluruh aturan BUY pada scan baru." };
   }
   return { title: "Setup memenuhi aturan pada saat scan", summary: "Entry tetap menunggu harga limit yang tercantum. Stop, target dan ukuran posisi dihitung dari data, biaya dan anggaran risiko; hasil trade masih perlu dievaluasi." };
 }

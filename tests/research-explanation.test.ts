@@ -32,4 +32,13 @@ describe("plain-language research risk", () => {
     expect(result.summary).not.toContain("di bawah");
     expect(result.summary).toContain("Rekaman lama");
   });
+  it("explicitly identifies WAIT requirements as unmet rather than claiming positive confirmation", () => {
+    const setup = { score: 80, action: "WAIT", qualification: [
+      { id: "momentum", requiredFor: "buy", passed: false },
+      { id: "rsi", requiredFor: "buy", passed: true },
+    ] } as unknown as MarketSetup;
+    expect(explainDecision(setup).summary).toContain("belum terpenuhi");
+    expect(explainDecision(setup).summary).toContain("MACD");
+    expect(explainDecision(setup).summary).not.toContain("RSI");
+  });
 });
