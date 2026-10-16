@@ -1,13 +1,14 @@
 "use client";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AreaSeries, CandlestickSeries, HistogramSeries, LineSeries, ColorType, CrosshairMode, LineStyle, PriceScaleMode, createChart, createSeriesMarkers, type IChartApi, type MouseEventParams, type UTCTimestamp } from "lightweight-charts";
-import { Activity, ChevronLeft, ChevronRight, Expand, LoaderCircle, Minus, Plus, RefreshCw, RotateCcw, Settings2, Shrink } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Expand, LoaderCircle, Minus, Plus, RefreshCw, RotateCcw, Ruler, Settings2, Shrink, X } from "lucide-react";
 import type { Candle, MarketSetup, Timeframe } from "@/lib/types";
 import { cn, decimalPlaces, percent, price } from "@/lib/utils";
 import { CANDLE_REFRESH_MS } from "@/lib/live-market";
 import { buildChartStudies, candleMetrics, chartPreset, readChartSettings, STUDY_LABELS, type ChartSettings } from "@/lib/chart-studies";
 import { ChartSettingsPanel } from "./chart-settings";
 import { Button } from "./ui/button";
+import { ChartRuler, type RulerSeries } from "./chart-ruler";
 
 const STORAGE = "cix-chart-studio-v1";
 const CHANGE_EVENT = "cix-chart-studio-change";
@@ -23,6 +24,7 @@ type Cursor = { time: number; x: number } | null;
 export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup; timeframe: Timeframe; refresh: number }) {
   const container = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const rulerSeriesRef = useRef<RulerSeries | null>(null);
   const crosshairRef = useRef<((candle: Candle) => void) | null>(null);
   const viewport = useRef<{ from: number; to: number; first: number; count: number } | null>(null);
   const raw = useSyncExternalStore(subscribeSettings, storedSettings, serverSettings);
@@ -31,6 +33,9 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
   const config = temporarySettings ?? saved;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [measuring, setMeasuring] = useState(false);
+  const [rulerKey, setRulerKey] = useState(0);
+  const clearRuler = useCallback(() => { setRulerKey(value => value + 1); setMeasuring(false); }, []);
   const [storageError, setStorageError] = useState("");
   const [candles, setCandles] = useState<Candle[]>([]);
   const [cursor, setCursor] = useState<Cursor>(null);
@@ -39,9 +44,11 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
   const [retry, setRetry] = useState(0);
   const [receivedAt, setReceivedAt] = useState(0);
   const studies = useMemo(() => buildChartStudies(candles, config), [candles, config]);
+  const candleTimes = useMemo(() => candles.map(candle => candle.time), [candles]);
+  const rulerRevision = useMemo(() => ({ config, setup }), [config, setup]);
   function saveSettings(next: ChartSettings) {
     try { localStorage.setItem(STORAGE, JSON.stringify(next)); setTemporarySettings(null); setStorageError(""); window.dispatchEvent(new Event(CHANGE_EVENT)); }
-    catch { setTemporarySettings(next); setStorageError("Penyimpanan browser tidak tersedia. Pengaturan berlaku selama sesi ini."); }
+    catch { setTemporarySettings(next); setStorageError("Browser storage is unavailable. Settings apply for this session."); }
   }
   useEffect(() => {
     if (!expanded) return;
@@ -83,7 +90,7 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
       rightPriceScale: { borderColor: "#33435b", scaleMargins: { top: .12, bottom: .1 } },
       timeScale: { borderColor: "#33435b", timeVisible: true, secondsVisible: false, rightOffset: 8, barSpacing: 9, fixLeftEdge: true },
       handleScroll: true, handleScale: true,
-      localization: { locale: "id-ID" },
+      localization: { locale: "en-US" },
     });
     chartRef.current = chart;
     const tick = setup.tickSize ?? setup.plan?.tickSize ?? .00000001;
@@ -93,6 +100,7 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
     }) : config.style === "line" ? chart.addSeries(LineSeries, { color: "#8fbaff", lineWidth: 2, priceFormat })
       : chart.addSeries(AreaSeries, { lineColor: "#8fbaff", topColor: "#578bda44", bottomColor: "#578bda03", lineWidth: 2, priceFormat });
     series.setData(candles.map(c => ({ time: c.time / 1000 as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close, value: c.close })));
+    rulerSeriesRef.current = series;
     series.priceScale().applyOptions({ mode: config.scale === "log" ? PriceScaleMode.Logarithmic : config.scale === "percent" ? PriceScaleMode.Percentage : PriceScaleMode.Normal });
     function line(values: (number | null)[], color: string, title: string, pane = 0, oscillator = false) {
       const s = chart.addSeries(LineSeries, { color, title, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: true,
@@ -152,7 +160,7 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
     return () => {
       const range = chart.timeScale().getVisibleLogicalRange();
       if (range) viewport.current = { from: range.from, to: range.to, first: candles[0].time, count: candles.length };
-      chart.unsubscribeCrosshairMove(move); chart.unsubscribeClick(move); chart.remove(); chartRef.current = null; crosshairRef.current = null;
+      chart.unsubscribeCrosshairMove(move); chart.unsubscribeClick(move); chart.remove(); chartRef.current = null; crosshairRef.current = null; rulerSeriesRef.current = null;
     };
   }, [candles, config, loading, setup, studies, timeframe]);
 
@@ -170,27 +178,30 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
   function selectBar(nextIndex: number) { const candle = candles[nextIndex]; if (candle) { setCursor({ time: candle.time, x: 12 }); crosshairRef.current?.(candle); } }
   return <div className={cn("chart-studio", expanded && "chart-expanded")}>
     <div className="chart-command-bar"><div className="chart-studio-title"><Activity size={18} /><strong>Chart Studio</strong><span>{setup.baseAsset}/USDT · {timeframe.toUpperCase()}</span></div><div className="chart-command-actions">
-      <select aria-label="Preset indikator" value="" onChange={e => saveSettings(chartPreset(e.target.value as "trend" | "momentum" | "volatility" | "clean", config))}><option value="" disabled>Preset indikator</option><option value="trend">Trend & breakout</option><option value="momentum">Momentum</option><option value="volatility">Volatilitas</option><option value="clean">Chart bersih</option></select>
-      <button className={cn("chart-command", settingsOpen && "active")} aria-label="Pengaturan indikator" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}><Settings2 size={18} /><span>Indikator & tampilan</span></button>
-      <button className="chart-command" aria-label={expanded ? "Kecilkan chart" : "Perluas chart"} aria-pressed={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? <Shrink size={18} /> : <Expand size={18} />}</button>
+      <button className={cn("chart-command", measuring && "active")} aria-label="Measure price change" aria-pressed={measuring} disabled={loading || !candles.length} onClick={() => setMeasuring(!measuring)}><Ruler size={18} /><span>Measure</span></button>
+      <button className="chart-command" aria-label="Clear measurement" disabled={loading || !candles.length} onClick={clearRuler}><X size={18} /><span>Clear</span></button>
+      <select aria-label="Indicator preset" value="" onChange={e => saveSettings(chartPreset(e.target.value as "trend" | "momentum" | "volatility" | "clean", config))}><option value="" disabled>Indicator preset</option><option value="trend">Trend & breakout</option><option value="momentum">Momentum</option><option value="volatility">Volatility</option><option value="clean">Clean chart</option></select>
+      <button className={cn("chart-command", settingsOpen && "active")} aria-label="Indicator settings" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}><Settings2 size={18} /><span>Indicators & display</span></button>
+      <button className="chart-command" aria-label={expanded ? "Exit expanded chart" : "Expand chart"} aria-pressed={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? <Shrink size={18} /> : <Expand size={18} />}</button>
     </div></div>
     {settingsOpen && <ChartSettingsPanel key={raw} value={config} onApply={saveSettings} onClose={() => setSettingsOpen(false)} />}
-    <div className="study-chips" aria-label="Indikator aktif">{STUDY_LABELS.map(study => <button key={study.key} className={config[study.key] ? "active" : ""} aria-pressed={config[study.key]} onClick={() => saveSettings({ ...config, [study.key]: !config[study.key] })}>{study.label}<span>{config[study.key] ? "ON" : "+"}</span></button>)}</div>
+    <div className="study-chips" aria-label="Active indicators">{STUDY_LABELS.map(study => <button key={study.key} className={config[study.key] ? "active" : ""} aria-pressed={config[study.key]} onClick={() => saveSettings({ ...config, [study.key]: !config[study.key] })}>{study.label}<span>{config[study.key] ? "ON" : "+"}</span></button>)}</div>
     {storageError && <p className="chart-refresh-note unavailable">{storageError}</p>}
-    <div className="candle-inspector" aria-label="Detail candle terpilih">
-      <div className="candle-inspector-heading"><div><span className="eyebrow">{cursor ? "CANDLE TERPILIH" : "CANDLE TERAKHIR"}</span><strong>{selected ? new Date(selected.time).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }) : "Menunggu data Binance"}</strong></div><div className="candle-nav"><button aria-label="Candle sebelumnya" disabled={index <= 0} onClick={() => selectBar(index - 1)}><ChevronLeft size={18} /></button><span>{selected ? `${index + 1}/${candles.length}` : "—"}</span><button aria-label="Candle berikutnya" disabled={!cursor || index >= candles.length - 1} onClick={() => selectBar(index + 1)}><ChevronRight size={18} /></button></div></div>
+    <div className="candle-inspector" aria-label="Selected candle details">
+      <div className="candle-inspector-heading"><div><span className="eyebrow">{cursor ? "SELECTED CANDLE" : "LATEST CLOSED CANDLE"}</span><strong>{selected ? new Date(selected.time).toLocaleString("en-US", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZoneName: "short" }) : "Waiting for Binance data"}</strong></div><div className="candle-nav"><button aria-label="Previous candle" disabled={index <= 0} onClick={() => selectBar(index - 1)}><ChevronLeft size={18} /></button><span>{selected ? `${index + 1}/${candles.length}` : "—"}</span><button aria-label="Next candle" disabled={!cursor || index >= candles.length - 1} onClick={() => selectBar(index + 1)}><ChevronRight size={18} /></button></div></div>
       <div className="candle-price-grid">{(["open", "high", "low", "close"] as const).map((field, i) => <div key={field}><span>{["Open", "High", "Low", "Close"][i]}</span><strong>{selected ? price(selected[field]) : "—"}</strong></div>)}<div><span>Volume</span><strong>{selected ? price(selected.volume, true) : "—"}</strong></div></div>
-      <div className="candle-percent-grid"><div><span>Perubahan open → close</span><strong data-testid="candle-body-percent" className={metrics && metrics.bodyPct < 0 ? "negative" : "positive"}>{percent(metrics?.bodyPct)}</strong></div><div><span>Range high − low / open</span><strong data-testid="candle-range-percent">{metrics ? `${metrics.rangePct.toFixed(2)}%` : "—"}</strong></div><div><span>Dari close sebelumnya</span><strong className={metrics?.previousClosePct != null && metrics.previousClosePct < 0 ? "negative" : "positive"}>{percent(metrics?.previousClosePct)}</strong></div></div>
+      <div className="candle-percent-grid"><div><span>Open → close change</span><strong data-testid="candle-body-percent" className={metrics && metrics.bodyPct < 0 ? "negative" : "positive"}>{percent(metrics?.bodyPct)}</strong></div><div><span>Range high − low / open</span><strong data-testid="candle-range-percent">{metrics ? `${metrics.rangePct.toFixed(2)}%` : "—"}</strong></div><div><span>From previous close</span><strong className={metrics?.previousClosePct != null && metrics.previousClosePct < 0 ? "negative" : "positive"}>{percent(metrics?.previousClosePct)}</strong></div></div>
     </div>
     <div className="chart-canvas-wrapper" style={{ height }}>
       <div className="chart-canvas advanced-canvas" ref={container} data-testid="advanced-chart-canvas" />
-      {cursor && metrics && <div className="candle-hover-tooltip" role="status" style={{ left: cursor.x }}><span>{new Date(selected.time).toLocaleString("id-ID", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · {timeframe.toUpperCase()}</span><strong className={metrics.bodyPct < 0 ? "negative" : "positive"}>{percent(metrics.bodyPct)}<small>open → close</small></strong><div><span>Range <b>{metrics.rangePct.toFixed(2)}%</b></span><span>Volume <b>{price(selected.volume, true)}</b></span></div></div>}
-      {(loading || (error && !candles.length)) && <div className="chart-state">{loading ? <><LoaderCircle className="spin" size={28} /><p>Memuat candle Binance…</p></> : <><Activity size={28} /><p>{error}</p><Button variant="outline" onClick={() => { setLoading(true); setError(""); setRetry(v => v + 1); }}><RefreshCw />Coba lagi</Button></>}</div>}
+      {!loading && !!candles.length && <ChartRuler key={rulerKey} chartRef={chartRef} seriesRef={rulerSeriesRef} times={candleTimes} intervalMs={intervalMs[timeframe]} enabled={measuring} revision={rulerRevision} onEscape={clearRuler} />}
+      {!measuring && cursor && metrics && <div className="candle-hover-tooltip" role="status" style={{ left: cursor.x }}><span>{new Date(selected.time).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · {timeframe.toUpperCase()}</span><strong className={metrics.bodyPct < 0 ? "negative" : "positive"}>{percent(metrics.bodyPct)}<small>open → close</small></strong><div><span>Range <b>{metrics.rangePct.toFixed(2)}%</b></span><span>Volume <b>{price(selected.volume, true)}</b></span></div></div>}
+      {(loading || (error && !candles.length)) && <div className="chart-state">{loading ? <><LoaderCircle className="spin" size={28} /><p>Loading Binance candles…</p></> : <><Activity size={28} /><p>{error}</p><Button variant="outline" onClick={() => { setLoading(true); setError(""); setRetry(v => v + 1); }}><RefreshCw />Retry</Button></>}</div>}
     </div>
-    <div className="chart-navigation-bar"><div className="chart-ranges">{[50, 100, 200, "all"].map(count => <button key={count} onClick={() => range(count as number | "all")}>{count === "all" ? "Semua" : `${count} bar`}</button>)}</div><div className="chart-zoom"><button aria-label="Zoom out chart" onClick={() => zoom(1.3)}><Minus size={18} /></button><button aria-label="Zoom in chart" onClick={() => zoom(.75)}><Plus size={18} /></button><button aria-label="Reset tampilan chart" onClick={() => range(90)}><RotateCcw size={17} /></button></div></div>
+    <div className="chart-navigation-bar"><div className="chart-ranges">{[50, 100, 200, "all"].map(count => <button key={count} onClick={() => range(count as number | "all")}>{count === "all" ? "All" : `${count} bars`}</button>)}</div><div className="chart-zoom"><button aria-label="Zoom out chart" onClick={() => zoom(1.3)}><Minus size={18} /></button><button aria-label="Zoom in chart" onClick={() => zoom(.75)}><Plus size={18} /></button><button aria-label="Reset chart view" onClick={() => range(90)}><RotateCcw size={17} /></button></div></div>
     <div className="study-readout">{config.ema && <span>EMA {config.emaFast} <b>{studyPrice(studies.emaFast[index])}</b> · {config.emaSlow} <b>{studyPrice(studies.emaSlow[index])}</b> · {config.emaLong} <b>{studyPrice(studies.emaLong[index])}</b></span>}{config.rsi && <span>RSI {config.rsiPeriod} <b>{studies.rsi[index]?.toFixed(2) ?? "—"}</b></span>}{config.macd && <span>MACD <b>{studyPrice(studies.macdLine[index])}</b> · signal <b>{studyPrice(studies.macdSignal[index])}</b></span>}{config.atr && <span>ATR {config.atrPeriod} <b>{studyPrice(studies.atr[index])}</b></span>}{config.vwap && <span>UTC VWAP <b>{studyPrice(studies.vwap[index])}</b></span>}</div>
-    <p className={cn("chart-refresh-note", (error || stale) && "unavailable")}>{error ? "Refresh gagal · menampilkan histori terakhir yang diterima" : stale ? "Histori candle sudah kedaluwarsa" : "Candle tertutup · refresh setiap menit"}{last && ` · Close terakhir ${new Date(last.closeTime).toLocaleString("id-ID")}`}</p>
-    <p className="chart-instruction">Arahkan kursor atau tap candle untuk detail persentase. Geser untuk menelusuri; scroll atau pinch untuk zoom. Studi chart memakai histori yang ditampilkan, sedangkan skor rekomendasi dibekukan pada waktu scan.</p>
-    {config.scale === "percent" && <p className="chart-refresh-note">Skala % memakai nilai pertama yang terlihat sebagai 0%; acuannya mengikuti pan/zoom. Gunakan harga biasa/log untuk membandingkan level harga dan overlay.</p>}
+    <p className={cn("chart-refresh-note", (error || stale) && "unavailable")}>{error ? "Refresh failed · showing the last received history" : stale ? "Candle history is stale" : "Closed candles · refreshed every minute"}{last && ` · Latest close ${new Date(last.closeTime).toLocaleString("en-US")}`}</p>
+    <p className="chart-instruction">Hover or tap a candle for its percentage change. Drag to pan; scroll or pinch to zoom. Select Measure to drag a price range or choose two points. Chart studies use the displayed history; recommendation scores remain frozen at the scan.</p>
+    {config.scale === "percent" && <p className="chart-refresh-note">Percentage scale uses the first visible value as 0% and follows pan/zoom. The ruler still measures raw prices. Use price or log scale to compare absolute levels.</p>}
   </div>;
 }

@@ -14,38 +14,38 @@ export function ChartSettingsPanel({ value, onApply, onClose }: { value: ChartSe
   function toggle(key: keyof ChartSettings, label: string, hint: string) {
     return <label className="study-setting-toggle"><input type="checkbox" checked={Boolean(draft[key])} onChange={e => setDraft(current => ({ ...current, [key]: e.target.checked }))} /><span><strong>{label}</strong><small>{hint}</small></span></label>;
   }
-  return <form className="chart-settings-panel" aria-label="Pengaturan indikator chart" onSubmit={event => {
+  return <form className="chart-settings-panel" aria-label="Chart indicator settings" onSubmit={event => {
     event.preventDefault(); const parsed = chartSettingsSchema.safeParse(draft);
-    if (!parsed.success) { setError(parsed.error.issues[0]?.message || "Periksa periode indikator."); return; }
+    if (!parsed.success) { setError(parsed.error.issues[0]?.message || "Check the indicator periods."); return; }
     onApply(parsed.data); onClose();
   }}>
-    <div className="chart-settings-heading"><div><span className="eyebrow">CHART STUDIO</span><h3>Atur cara Anda membaca pasar.</h3><p>Disimpan di perangkat ini. Parameter chart tidak mengubah aturan atau rekomendasi scanner.</p></div><button type="button" className="icon-button" aria-label="Tutup pengaturan chart" onClick={onClose}><X size={21} /></button></div>
+    <div className="chart-settings-heading"><div><span className="eyebrow">CHART STUDIO</span><h3>Set up your market view.</h3><p>Saved on this device. Chart settings do not change scanner rules or recommendations.</p></div><button type="button" className="icon-button" aria-label="Close chart settings" onClick={onClose}><X size={21} /></button></div>
     <div className="chart-settings-grid">
-      <fieldset><legend>Overlay harga</legend>
-        {toggle("ema", "Exponential Moving Average", "Tiga garis tren; respons lebih besar pada harga terbaru.")}
-        <div className="study-parameters">{number("emaFast", "EMA cepat")}{number("emaSlow", "EMA tengah")}{number("emaLong", "EMA panjang")}</div>
-        {toggle("sma", "Simple Moving Average", "Rata-rata penutupan dengan bobot yang sama.")}{number("smaPeriod", "Periode SMA")}
-        {toggle("bollinger", "Bollinger Bands", "SMA ± deviasi standar; mengamati penyebaran harga.")}
-        <div className="study-parameters">{number("bbPeriod", "Periode BB")}{number("bbMultiplier", "Deviasi", .5, 4, .1)}</div>
-        {toggle("vwap", "Session VWAP", "Quote volume ÷ base volume; reset setiap 00:00 UTC.")}
-        {toggle("donchian", "Donchian Channel", "High/low N candle sebelumnya; candle saat ini dikecualikan.")}{number("donchianPeriod", "Lookback Donchian")}
+      <fieldset><legend>Price overlays</legend>
+        {toggle("ema", "Exponential Moving Average", "Three trend lines that give greater weight to recent prices.")}
+        <div className="study-parameters">{number("emaFast", "Fast EMA")}{number("emaSlow", "Middle EMA")}{number("emaLong", "Long EMA")}</div>
+        {toggle("sma", "Simple Moving Average", "An equally weighted average of closing prices.")}{number("smaPeriod", "SMA period")}
+        {toggle("bollinger", "Bollinger Bands", "SMA plus or minus standard deviations to show price dispersion.")}
+        <div className="study-parameters">{number("bbPeriod", "BB period")}{number("bbMultiplier", "Deviations", .5, 4, .1)}</div>
+        {toggle("vwap", "Session VWAP", "Quote volume / base volume; resets at 00:00 UTC.")}
+        {toggle("donchian", "Donchian Channel", "High/low of the prior N candles; excludes the current candle.")}{number("donchianPeriod", "Donchian lookback")}
       </fieldset>
-      <fieldset><legend>Panel momentum & volume</legend>
-        {toggle("volume", "Volume", "Volume transaksi nyata per candle dari Binance.")}
-        {toggle("rsi", "Relative Strength Index", "Wilder RSI; garis referensi 30, 50 dan 70.")}{number("rsiPeriod", "Periode RSI")}
-        {toggle("macd", "MACD", "EMA cepat − EMA lambat, garis signal dan histogram.")}
+      <fieldset><legend>Momentum & volume panes</legend>
+        {toggle("volume", "Volume", "Actual Binance traded base volume per candle.")}
+        {toggle("rsi", "Relative Strength Index", "Wilder RSI with reference levels at 30, 50, and 70.")}{number("rsiPeriod", "RSI period")}
+        {toggle("macd", "MACD", "Fast EMA minus slow EMA, with signal line and histogram.")}
         <div className="study-parameters">{number("macdFast", "MACD fast")}{number("macdSlow", "MACD slow")}{number("macdSignal", "Signal")}</div>
-        {toggle("atr", "Average True Range", "Volatilitas dalam satuan harga; bukan arah pergerakan.")}{number("atrPeriod", "Periode ATR")}
-        {toggle("levels", "Level rekomendasi", "Entry, stop dan TP asli; hanya muncul jika ada rencana valid.")}
-        {toggle("structure", "Struktur pasar", "BOS, CHoCH, FVG dan sweep yang sudah dikonfirmasi.")}
+        {toggle("atr", "Average True Range", "Volatility in price units; does not indicate direction.")}{number("atrPeriod", "ATR period")}
+        {toggle("levels", "Recommendation levels", "Original entry, stop, and targets; shown only for valid research plans.")}
+        {toggle("structure", "Market structure", "Confirmed BOS, CHoCH, FVG, and liquidity sweeps.")}
       </fieldset>
-      <fieldset className="chart-appearance"><legend>Tampilan</legend>
-        <label>Jenis chart<select value={draft.style} onChange={e => set("style", e.target.value as ChartSettings["style"])}><option value="candles">Candlestick</option><option value="line">Line</option><option value="area">Area</option></select></label>
-        <label>Skala harga<select value={draft.scale} onChange={e => set("scale", e.target.value as ChartSettings["scale"])}><option value="price">Harga biasa</option><option value="log">Logaritmik</option><option value="percent">Persentase dari awal tampilan</option></select></label>
-        {toggle("grid", "Grid", "Garis bantu horizontal dan vertikal.")}{toggle("magnet", "Crosshair magnet", "Kursor menempel ke nilai seri terdekat.")}
+      <fieldset className="chart-appearance"><legend>Appearance</legend>
+        <label>Chart type<select value={draft.style} onChange={e => set("style", e.target.value as ChartSettings["style"])}><option value="candles">Candlestick</option><option value="line">Line</option><option value="area">Area</option></select></label>
+        <label>Price scale<select value={draft.scale} onChange={e => set("scale", e.target.value as ChartSettings["scale"])}><option value="price">Price</option><option value="log">Logarithmic</option><option value="percent">Percentage from first visible value</option></select></label>
+        {toggle("grid", "Grid", "Horizontal and vertical guide lines.")}{toggle("magnet", "Crosshair magnet", "Snap the crosshair to the nearest series value.")}
       </fieldset>
     </div>
     {error && <p role="alert" className="chart-setting-error">{error}</p>}
-    <div className="chart-settings-actions"><button type="button" className="text-button" onClick={() => { setDraft({ ...DEFAULT_CHART_SETTINGS }); setError(""); }}><RotateCcw size={17} />Kembalikan default</button><Button type="submit"><Check size={17} />Terapkan pengaturan</Button></div>
+    <div className="chart-settings-actions"><button type="button" className="text-button" onClick={() => { setDraft({ ...DEFAULT_CHART_SETTINGS }); setError(""); }}><RotateCcw size={17} />Restore defaults</button><Button type="submit"><Check size={17} />Apply</Button></div>
   </form>;
 }

@@ -11,7 +11,7 @@ export const chartSettingsSchema = z.object({
   vwap: z.boolean(), donchian: z.boolean(), donchianPeriod: period,
   rsi: z.boolean(), rsiPeriod: period, macd: z.boolean(), macdFast: period, macdSlow: period, macdSignal: period,
   atr: z.boolean(), atrPeriod: period,
-}).refine(c => c.macdFast < c.macdSlow, { path: ["macdFast"], message: "MACD fast harus lebih kecil dari slow." });
+}).refine(c => c.macdFast < c.macdSlow, { path: ["macdFast"], message: "MACD fast period must be less than slow period." });
 export type ChartSettings = z.infer<typeof chartSettingsSchema>;
 export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   version: 1, style: "candles", scale: "price", grid: true, magnet: true, volume: true, levels: true, structure: false,

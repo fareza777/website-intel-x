@@ -20,8 +20,24 @@ export async function writeLocalState(state: StoredState): Promise<void> {
 }
 
 let cached: { expires: number; value: StoredState } | null = null;
+function isPublishedState(value: unknown): value is StoredState {
+  if (!value || typeof value !== "object") return false;
+  const state = value as StoredState;
+  return state.version === 1 && typeof state.updatedAt === "string" && Array.isArray(state.signals) && Array.isArray(state.alerts)
+    && !!state.snapshot && Array.isArray(state.snapshot.setups);
+}
 export async function readPublishedState(): Promise<{ state: StoredState; persistence: "github" | "local" | "unavailable" }> {
-  const local = process.env.VERCEL ? null : await readLocalState();
+  let local: StoredState | null = null;
+  if (!process.env.VERCEL) {
+    try {
+      const candidate = await readLocalState();
+      if (isPublishedState(candidate)) local = candidate;
+    } catch (error) {
+      // Preserve malformed JSON for repair; a remote publication can recover
+      // the terminal. File-system/programming errors still reach the caller.
+      if (!(error instanceof SyntaxError)) throw error;
+    }
+  }
   const publicationTime = (state: StoredState) => Date.parse(state.updatedAt || state.snapshot?.generatedAt || "") || 0;
   function newest(remote: StoredState | null): { state: StoredState; persistence: "github" | "local" | "unavailable" } {
     if (local?.snapshot && (!remote || publicationTime(local) > publicationTime(remote))) return { state: local, persistence: "local" };
@@ -35,8 +51,8 @@ export async function readPublishedState(): Promise<{ state: StoredState; persis
     const minute = Math.floor(Date.now() / 60_000);
     const response = await fetch(`https://raw.githubusercontent.com/${repo}/market-data/state.json?minute=${minute}`, { signal: AbortSignal.timeout(12_000), cache: "no-store" });
     if (!response.ok) throw new Error("Published state unavailable");
-    const state = await response.json() as StoredState;
-    if (state.version !== 1 || !Array.isArray(state.signals) || !Array.isArray(state.snapshot?.setups)) throw new Error("Invalid published state");
+    const state = await response.json() as unknown;
+    if (!isPublishedState(state)) throw new Error("Invalid published state");
     cached = { value: state, expires: Date.now() + 60_000 };
     return newest(state);
   } catch {

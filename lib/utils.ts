@@ -12,10 +12,14 @@ export function decimalPlaces(value: number): number {
   const [mantissa, exponent = "0"] = value.toString().toLowerCase().split("e");
   return Math.max(0, Math.min(12, (mantissa.split(".")[1]?.length || 0) - Number(exponent)));
 }
-export function dollars(value: number | null | undefined, compact = false): string { return value == null ? "—" : value < 0 ? `−$${price(-value, compact)}` : `$${price(value, compact)}`; }
-export function percent(value: number | null | undefined): string { return value == null ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`; }
+export function dollars(value: number | null | undefined, compact = false): string { return value == null || !Number.isFinite(value) ? "—" : value < 0 ? `−$${price(-value, compact)}` : `$${price(value, compact)}`; }
+export function money(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+export function percent(value: number | null | undefined): string { return value == null || !Number.isFinite(value) ? "—" : `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`; }
 export function relativeTime(value: string | null | undefined): string {
-  if (!value) return "Not available";
+  if (!value || !Number.isFinite(Date.parse(value))) return "Not available";
   const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 60_000));
   return minutes < 1 ? "Just now" : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m ago` : `${Math.floor(minutes / 1440)}d ago`;
 }

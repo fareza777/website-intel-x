@@ -13,43 +13,43 @@ export function positionLoss(setup: MarketSetup): number | null {
   return match ? Number(match[1]) : null;
 }
 const labels: Record<string, [string, string]> = {
-  freshness: ["Data sudah lengkap saat scan", "Analisis memakai candle yang sudah ditutup, dengan batas umur data sesuai timeframe."],
-  liquidity: ["Pasar cukup likuid", "Volume harian harus cukup besar dan volume candle terbaru tidak terlalu sepi."],
-  trend_safety: ["Tren pendukung tidak turun", "Strategi spot long menghindari arah turun pada timeframe yang dipakai untuk konfirmasi."],
-  volatility: ["Pergerakan masih terkendali", "ATR mengukur rata-rata jangkauan harga. ATR terlalu besar membuat rencana entry dan stop lebih sulit dipertahankan."],
-  extension: ["Harga belum terlalu jauh naik", "Harga yang terlalu jauh di atas EMA atau RSI terlalu tinggi lebih rentan terkoreksi sebelum entry."],
-  risk: ["Stop loss dalam batas rencana", "Stop diletakkan di bawah support dan setidaknya 1,5 ATR dari entry. Jarak ini dihitung bersama fee dan slippage."],
-  alignment: ["Tren utama dan pendukung sama-sama naik", "Harga harus di atas EMA21, EMA21 di atas EMA50, dan EMA50 di atas EMA200 pada timeframe yang disyaratkan."],
-  structure: ["Ada konfirmasi harga terbaru", "Butuh candle naik dengan breakout high 20 candle sebelumnya atau struktur bullish yang sudah dikonfirmasi."],
-  vwap: ["Harga di atas VWAP sesi", "Penutupan harus di atas rata-rata harga tertimbang volume sesi UTC yang diamati."],
-  rsi: ["Momentum RSI berada di rentang entry", "RSI BUY memakai rentang 45–70. Angka ini adalah parameter strategi, bukan jaminan arah harga."],
-  momentum: ["Momentum MACD positif", "Histogram MACD harus positif pada timeframe keputusan dan konfirmasi yang disyaratkan."],
-  participation: ["Volume dan pembelian mendukung", "Volume relatif minimal 1,1× rata-rata sebelumnya; pangsa taker-buy minimal 52% pada window strategi."],
-  score: ["Kesepakatan teknikal cukup", "Skor adalah jumlah aturan yang selaras. BUY tetap memerlukan semua pemeriksaan keselamatan dan konfirmasi."],
+  freshness: ["Complete data at scan time", "Analysis uses closed candles, with freshness limits for each timeframe."],
+  liquidity: ["Sufficient market liquidity", "Daily volume must be large enough, and the latest candle's volume must not be too low."],
+  trend_safety: ["Supporting trends are not bearish", "The spot-long strategy avoids downtrends on confirmation timeframes."],
+  volatility: ["Volatility within limits", "ATR measures the average price range. Excessive ATR makes planned entries and stops harder to sustain."],
+  extension: ["Price is not overextended", "Price far above its EMA or an elevated RSI increases the risk of a correction before entry."],
+  risk: ["Stop loss within plan limits", "The stop sits below support and at least 1.5 ATR from entry. The loss calculation includes fees and slippage."],
+  alignment: ["Primary and supporting trends are bullish", "Price must be above EMA21, EMA21 above EMA50, and EMA50 above EMA200 on the required timeframes."],
+  structure: ["Recent price confirmation", "Requires a bullish candle breaking the previous 20-candle high or confirmed bullish structure."],
+  vwap: ["Price above session VWAP", "The close must be above the volume-weighted average price of the observed UTC session."],
+  rsi: ["RSI within the entry range", "The BUY RSI range is 45–70. This is a strategy parameter, not a guarantee of price direction."],
+  momentum: ["Positive MACD momentum", "The MACD histogram must be positive on the decision and required confirmation timeframes."],
+  participation: ["Supporting volume and buying", "Relative volume must be at least 1.1× the previous average, with taker-buy share of at least 52% over the strategy window."],
+  score: ["Sufficient technical agreement", "The score measures rule alignment. BUY still requires all safety and confirmation checks."],
 };
 function decisionFrames(timeframe: Timeframe): Timeframe[] { return timeframe === "15m" ? ["15m", "1h", "4h"] : timeframe === "1h" ? ["1h", "4h", "1d"] : timeframe === "4h" ? ["4h", "1d"] : ["1d"]; }
 export function explainCheck(check: QualificationCheck, setup: MarketSetup) {
   const timeframe = setup.timeframe ?? "1h", base = setup.indicators?.[timeframe];
   let [label, meaning] = labels[check.id] ?? [check.label, check.detail];
   if (setup.policy) {
-    if (check.id === "alignment") { label = "Tren naik untuk spot long"; meaning = "Close harus di atas EMA50 dan EMA50 di atas EMA200. Konteks lebih tinggi boleh netral, tetapi tidak bearish. Susunan EMA21 ikut skor, bukan veto tersendiri."; }
-    if (check.id === "structure") { label = "Pemicu entry sudah terkonfirmasi"; meaning = "Cukup satu jalur: breakout/struktur pada candle keputusan dengan volume ≥1×, atau pantulan EMA21 setelah pullback dengan close naik di atas close sebelumnya. Keduanya memakai candle tertutup."; }
+    if (check.id === "alignment") { label = "Bullish trend for spot long"; meaning = "Close must be above EMA50 and EMA50 above EMA200. Higher-timeframe context may be neutral, but not bearish. EMA21 alignment contributes to the score rather than acting as a separate veto."; }
+    if (check.id === "structure") { label = "Confirmed entry trigger"; meaning = "One path is enough: a breakout or structure confirmation on the decision candle with volume ≥1×, or an EMA21 bounce after a pullback with a close above the previous close. Both use closed candles."; }
     if (check.requiredFor === "context") {
-      meaning = `${check.id === "rsi" ? "RSI 45–70 adalah rentang yang disukai. RSI >78 tetap ditolak oleh aturan overextension." : check.id === "participation" ? "Volume relatif dan taker-buy menambah kualitas. Tidak harus taker-buy ≥52% untuk entry; breakout tetap perlu volume ≥1×, sedangkan pullback boleh pada volume normal/rendah." : check.id === "momentum" ? "MACD positif pada timeframe terkait mendukung momentum dan menambah skor; MACD yang belum positif tetap boleh disertai pemicu harga yang valid." : check.id === "vwap" ? "Close di atas VWAP memberi dukungan harga terhadap rata-rata sesi. Close di bawahnya mengurangi skor, tanpa membatalkan pemicu harga sendirian." : labels[check.id]?.[1] ?? check.detail} Ini indikator pendukung; tidak memveto entry sendirian.`;
-      if (check.id === "rsi") label = "RSI di rentang yang disukai";
+      meaning = `${check.id === "rsi" ? "RSI 45–70 is preferred. RSI >78 is still rejected by the overextension rule." : check.id === "participation" ? "Relative volume and taker-buy add quality. Entry does not require taker-buy ≥52%; breakouts still need volume ≥1×, while pullbacks may use normal or low volume." : check.id === "momentum" ? "Positive MACD on the relevant timeframes supports momentum and adds to the score. A valid price trigger may still qualify before MACD turns positive." : check.id === "vwap" ? "A close above VWAP supports price relative to the session average. A close below reduces the score without invalidating a price trigger on its own." : labels[check.id]?.[1] ?? check.detail} This supporting indicator does not veto entry on its own.`;
+      if (check.id === "rsi") label = "RSI within the preferred range";
     }
   }
   let measured = "";
-  if (["trend_safety", "alignment"].includes(check.id)) measured = decisionFrames(timeframe).map(tf => `${tf.toUpperCase()} ${setup.indicators?.[tf]?.trend === "bullish" ? "naik" : setup.indicators?.[tf]?.trend === "bearish" ? "turun" : "netral"}`).join(" · ");
-  if (check.id === "risk") measured = positionLoss(setup) === null ? "Level stop atau target yang valid belum terbentuk." : `Estimasi rugi posisi ${positionLoss(setup)!.toFixed(2)}% · batas kebijakan ${setup.riskReview?.maximumLossPct ?? 8}%.`;
-  if (check.id === "rsi" && base) measured = `${timeframe.toUpperCase()} RSI ${base.rsi.toFixed(1)} · ${check.requiredFor === "context" ? "rentang preferensi" : "rentang BUY"} 45–70.`;
-  if (check.id === "volatility" && base) measured = `${timeframe.toUpperCase()} ATR ${(base.atr / setup.price * 100).toFixed(2)}% dari harga · batas kebijakan ${setup.policy?.maximumAtrPct ?? 6}%.`;
-  if (check.id === "extension" && base) measured = `RSI ${base.rsi.toFixed(1)} · jarak dari EMA21 ${base.atr > 0 ? ((setup.price - base.ema21) / base.atr).toFixed(2) : "—"} ATR.`;
-  if (check.id === "score") measured = `${setup.score}/100 · minimal WAIT 50; batas skor awal BUY 78.`;
-  if (check.id === "liquidity") measured = `Volume 24 jam ${(setup.quoteVolume24h / 1e6).toFixed(2)} juta USDT · minimum 5 juta.`;
-  if (check.id === "participation" && setup.volume) measured = `Volume relatif ${setup.volume.relativeVolume.toFixed(2)}× · taker-buy ${(setup.volume.buyPressure * 100).toFixed(1)}%.`;
-  if (check.id === "freshness") measured = `Candle keputusan ${new Date(setup.asOf).toLocaleString("id-ID")}. Status pemeriksaan dibekukan saat scan.`;
-  if (check.id === "structure" && setup.policy) measured = setup.entryModel === "BREAKOUT" ? "Breakout high 20 candle sebelumnya." : setup.entryModel === "STRUCTURE_RECLAIM" ? "Struktur bullish dikonfirmasi pada candle keputusan." : setup.entryModel === "PULLBACK" ? "Pullback dan recovery EMA21 terkonfirmasi." : "Belum ada pemicu harga yang lolos pada candle keputusan.";
+  if (["trend_safety", "alignment"].includes(check.id)) measured = decisionFrames(timeframe).map(tf => `${tf.toUpperCase()} ${setup.indicators?.[tf]?.trend === "bullish" ? "bullish" : setup.indicators?.[tf]?.trend === "bearish" ? "bearish" : "neutral"}`).join(" · ");
+  if (check.id === "risk") measured = positionLoss(setup) === null ? "Valid stop or target levels have not formed." : `Estimated position loss ${positionLoss(setup)!.toFixed(2)}% · policy limit ${setup.riskReview?.maximumLossPct ?? 8}%.`;
+  if (check.id === "rsi" && base) measured = `${timeframe.toUpperCase()} RSI ${base.rsi.toFixed(1)} · ${check.requiredFor === "context" ? "preferred range" : "BUY range"} 45–70.`;
+  if (check.id === "volatility" && base) measured = `${timeframe.toUpperCase()} ATR ${(base.atr / setup.price * 100).toFixed(2)}% of price · policy limit ${setup.policy?.maximumAtrPct ?? 6}%.`;
+  if (check.id === "extension" && base) measured = `RSI ${base.rsi.toFixed(1)} · distance from EMA21 ${base.atr > 0 ? ((setup.price - base.ema21) / base.atr).toFixed(2) : "—"} ATR.`;
+  if (check.id === "score") measured = `${setup.score}/100 · WAIT minimum 50; base BUY threshold 78.`;
+  if (check.id === "liquidity") measured = `24h volume ${(setup.quoteVolume24h / 1e6).toFixed(2)} million USDT · minimum 5 million.`;
+  if (check.id === "participation" && setup.volume) measured = `Relative volume ${setup.volume.relativeVolume.toFixed(2)}× · taker-buy ${(setup.volume.buyPressure * 100).toFixed(1)}%.`;
+  if (check.id === "freshness") measured = `Decision candle ${new Date(setup.asOf).toLocaleString("en-US")}. Check status is frozen at scan time.`;
+  if (check.id === "structure" && setup.policy) measured = setup.entryModel === "BREAKOUT" ? "Breakout above the previous 20-candle high." : setup.entryModel === "STRUCTURE_RECLAIM" ? "Bullish structure confirmed on the decision candle." : setup.entryModel === "PULLBACK" ? "Confirmed pullback and EMA21 recovery." : "No qualifying price trigger on the decision candle.";
   return { label, meaning, measured };
 }
 export function explainDecision(setup: MarketSetup) {
@@ -57,18 +57,18 @@ export function explainDecision(setup: MarketSetup) {
   const risk = blocked.find(c => c.id === "risk");
   const loss = positionLoss(setup);
   if (setup.action === "NO TRADE" && risk && loss !== null && loss > (setup.riskReview?.maximumLossPct ?? 8)) return {
-    title: "Stop loss terlalu jauh untuk aturan ini",
-    summary: `Jika stop tersentuh, estimasi rugi ${loss.toFixed(2)}% dari nilai posisi, termasuk biaya. Batas ${setup.riskReview?.maximumLossPct ?? 8}% adalah kebijakan aplikasi untuk rencana ini. Risiko terhadap modal akun ditentukan lagi oleh ukuran posisi.`,
+    title: "Stop loss exceeds the strategy limit",
+    summary: `If the stop is reached, estimated loss is ${loss.toFixed(2)}% of position value, including costs. The ${setup.riskReview?.maximumLossPct ?? 8}% limit is the app's policy for this plan. Position size separately determines the risk to account capital.`,
   };
   if (setup.action === "NO TRADE" && blocked.length) {
-    const first = explainCheck(blocked[0], setup); return { title: first.label + " — belum terpenuhi", summary: [first.meaning, first.measured].filter(Boolean).join(" ") };
+    const first = explainCheck(blocked[0], setup); return { title: first.label + " — unmet", summary: [first.meaning, first.measured].filter(Boolean).join(" ") };
   }
-  if (setup.action === "NO TRADE" && setup.score < 50) return { title: "Kesepakatan indikator belum cukup", summary: `Skor ${setup.score}/100 berada di bawah kriteria rencana yang layak. WAIT membutuhkan minimal 50 serta pemeriksaan keselamatan yang lolos. Skor ini mengukur keselarasan aturan, bukan peluang menang.` };
-  if (setup.action === "NO TRADE") return { title: "Rencana belum memenuhi syarat strategi", summary: "Publikasi ini ditolak oleh aturan keselamatan atau kelayakan rencana. Rekaman lama belum menyertakan checklist terstruktur; alasan aslinya tersedia pada rincian setup. Skor tinggi tetap tidak menggantikan pemeriksaan tersebut." };
+  if (setup.action === "NO TRADE" && setup.score < 50) return { title: "Insufficient indicator agreement", summary: `The ${setup.score}/100 score is below the plan qualification threshold. WAIT requires at least 50 and passed safety checks. This score measures rule alignment, not win probability.` };
+  if (setup.action === "NO TRADE") return { title: "Plan does not meet strategy requirements", summary: "This publication failed safety or plan qualification rules. Legacy records do not include a structured checklist; their original reasons remain in the setup details. A high score does not replace those checks." };
   if (setup.action === "WAIT") {
     const missing = setup.qualification?.filter(c => !c.passed && c.requiredFor === "buy").slice(0, 2).map(c => explainCheck(c, setup).label) ?? [];
-    return { title: "Pantau dulu, konfirmasi belum lengkap", summary: missing.length ? `Syarat yang belum terpenuhi: ${missing.join("; ")}. Rencana WAIT belum dapat diambil sebagai trade virtual.` : "Tunggu tren, momentum, struktur dan volume memenuhi seluruh aturan BUY pada scan baru." };
+    return { title: "Watch for complete confirmation", summary: missing.length ? `Unmet requirements: ${missing.join("; ")}. WAIT plans cannot yet be taken as paper trades.` : "Wait for trend, momentum, structure and volume to meet all BUY rules in a new scan." };
   }
-  if (setup.policy) return { title: `${setup.entryModel === "PULLBACK" ? "Pullback EMA21" : setup.entryModel === "STRUCTURE_RECLAIM" ? "Reclaim struktur" : "Breakout terkonfirmasi"} · siap diambil sebagai trade virtual`, summary: "Semua syarat wajib lolos; indikator pendukung tidak harus sempurna. Ambil rencana untuk mulai mencatat simulasi. Fill tetap menunggu harga entry, dan ukuran posisi dibatasi anggaran risiko akun setelah biaya." };
-  return { title: "Setup memenuhi aturan pada saat scan", summary: "Entry tetap menunggu harga limit yang tercantum. Stop, target dan ukuran posisi dihitung dari data, biaya dan anggaran risiko; hasil trade masih perlu dievaluasi." };
+  if (setup.policy) return { title: `${setup.entryModel === "PULLBACK" ? "EMA21 pullback" : setup.entryModel === "STRUCTURE_RECLAIM" ? "Structure reclaim" : "Confirmed breakout"} · ready for paper trading`, summary: "All required checks passed; supporting indicators need not be perfect. Take the plan to start recording the simulation. A fill still needs the entry price, and position size is limited by the account risk budget after costs." };
+  return { title: "Setup met the rules at scan time", summary: "Entry still waits for the listed limit price. Stop, targets and position size use the data, costs and risk budget; the trade outcome still needs evaluation." };
 }

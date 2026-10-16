@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { applyPaperUpdates, createPaperAccount, importPaperAccount, reservePosition, reconcilePosition, settlePaperPosition } from "../lib/paper";
+import { applyPaperUpdates, createPaperAccount, importPaperAccount, previewPosition, reservePosition, reconcilePosition, settlePaperPosition } from "../lib/paper";
 import { advanceSignal } from "../lib/tracking";
 import type { MarketSetup, TrackedSignal } from "../lib/types";
 const indicator = { ema21: 100, ema50: 98, ema200: 90, rsi: 55, macd: 1, macdSignal: .5, macdHistogram: .5, atr: 2, trend: "bullish" as const };
@@ -9,6 +9,29 @@ it("reserves cash and prevents duplicate simulated positions", () => {
   expect(first.cash).toBeGreaterThan(0);
   expect(first.cash + first.positions[0].reserved).toBeCloseTo(1000, 8);
   expect(() => reservePosition(first, setup, 1, "2026-01-01T00:00:00Z")).toThrow(/already/i);
+});
+it("previews the exact virtual reservation using the account capital and remaining cash without mutation", () => {
+  const at = "2026-01-01T00:00:00Z";
+  const account = reservePosition(createPaperAccount(1000), setup, 5, at);
+  const nextSetup = { ...setup, id: "second", symbol: "ETHUSDT", baseAsset: "ETH" };
+  const originalAccount = structuredClone(account), originalSetup = structuredClone(nextSetup);
+  const preview = previewPosition(account, nextSetup, 1, at);
+  expect(preview.quantity).toBe(.538);
+  expect(preview.reserved).toBeCloseTo(53.8807269, 8);
+  expect(preview.maxLoss).toBeCloseTo(.538 * 5.2925025, 8);
+  expect(account).toEqual(originalAccount);
+  expect(nextSetup).toEqual(originalSetup);
+  const reserved = reservePosition(account, nextSetup, 1, at);
+  expect(reserved.positions[0].quantity).toBe(preview.quantity);
+  expect(reserved.positions[0].reserved).toBe(preview.reserved);
+  expect(reserved.cash).toBeCloseTo(account.cash - preview.reserved, 8);
+});
+it("applies the same duplicate and expiry guards to virtual previews and reservations", () => {
+  const at = "2026-01-01T01:00:00Z";
+  const account = reservePosition(createPaperAccount(1000), setup, 1, at);
+  const expired = { ...setup, id: "expired", symbol: "ETHUSDT", baseAsset: "ETH", expiresAt: "2026-01-01T00:30:00Z" };
+  expect(() => previewPosition(account, setup, 1, at)).toThrow(/already/i);
+  expect(() => previewPosition(account, expired, 1, at)).toThrow(/current/i);
 });
 it("refunds an expired unfilled order exactly once", () => {
   const account = reservePosition(createPaperAccount(1000), setup, 1, "2026-01-01T00:00:00Z");

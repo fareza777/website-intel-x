@@ -16,11 +16,11 @@ describe("plain-language research risk", () => {
       { id: "risk", requiredFor: "plan", passed: false, detail: "Required stop risk 15.14% exceeds 8% after fees/slippage." },
     ], reasons: [] } as unknown as MarketSetup;
     const explanation = explainDecision(setup);
-    expect(explanation.title).toMatch(/Stop loss terlalu jauh/);
+    expect(explanation.title).toMatch(/Stop loss exceeds/);
     expect(explanation.summary).toContain("15.14%");
-    expect(explanation.summary).toContain("nilai posisi");
-    expect(explanation.summary).toContain("kebijakan");
-    expect(explanation.summary).not.toMatch(/93%|peluang menang 93/);
+    expect(explanation.summary).toContain("position value");
+    expect(explanation.summary).toContain("policy");
+    expect(explanation.summary).not.toMatch(/93%|93.*win probability/);
   });
   it("gives the actual WAIT score floor for an otherwise safe rejected setup", () => {
     const explanation = explainDecision({ score: 41, action: "NO TRADE", reasons: [], qualification: [] } as unknown as MarketSetup);
@@ -29,15 +29,15 @@ describe("plain-language research risk", () => {
   });
   it("does not invent a weak-score rejection for a legacy high-score setup", () => {
     const result = explainDecision({ score: 82, action: "NO TRADE", reasons: ["No valid structure/ATR plan."] } as unknown as MarketSetup);
-    expect(result.summary).not.toContain("di bawah");
-    expect(result.summary).toContain("Rekaman lama");
+    expect(result.summary).not.toContain("below");
+    expect(result.summary).toContain("Legacy records");
   });
   it("explicitly identifies WAIT requirements as unmet rather than claiming positive confirmation", () => {
     const setup = { score: 80, action: "WAIT", qualification: [
       { id: "momentum", requiredFor: "buy", passed: false },
       { id: "rsi", requiredFor: "buy", passed: true },
     ] } as unknown as MarketSetup;
-    expect(explainDecision(setup).summary).toContain("belum terpenuhi");
+    expect(explainDecision(setup).summary).toContain("Unmet requirements");
     expect(explainDecision(setup).summary).toContain("MACD");
     expect(explainDecision(setup).summary).not.toContain("RSI");
   });

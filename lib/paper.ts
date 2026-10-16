@@ -5,6 +5,7 @@ import { roundToStep } from "./market/risk";
 import type { MarketSetup, TrackedSignal } from "./types";
 export interface PaperPosition { signal: TrackedSignal; quantity: number; reserved: number; entryCost: number | null; settled: boolean; journal: string }
 export interface PaperAccount { version: 1; initialCapital: number; cash: number; positions: PaperPosition[] }
+export interface PaperPositionPreview { quantity: number; reserved: number; maxLoss: number }
 export function createPaperAccount(capital = 10_000): PaperAccount {
   if (!Number.isFinite(capital) || capital < 100 || capital > 1e9) throw new Error("Virtual capital must be between $100 and $1 billion.");
   return { version: 1, initialCapital: capital, cash: capital, positions: [] };
@@ -45,7 +46,7 @@ export function importPaperAccount(value: string): PaperAccount {
   if (value.length > 5_000_000) throw new Error("Portfolio file exceeds 5 MB.");
   return accountSchema.parse(JSON.parse(value)) as unknown as PaperAccount;
 }
-export function reservePosition(account: PaperAccount, setup: MarketSetup, riskPercent: number, at = new Date().toISOString()): PaperAccount {
+export function previewPosition(account: PaperAccount, setup: MarketSetup, riskPercent: number, at = new Date().toISOString()): PaperPositionPreview {
   setupSchema.parse(setup);
   if (!Number.isFinite(account.cash) || !Number.isFinite(account.initialCapital) || account.cash < 0) throw new Error("Invalid virtual cash balance.");
   const plan = setup.plan;
@@ -65,6 +66,10 @@ export function reservePosition(account: PaperAccount, setup: MarketSetup, riskP
   if (quantity * entryCost > account.cash || quantity * perUnitLoss > account.initialCapital * riskPercent / 100) quantity = roundToStep(quantity - plan.stepSize, plan.stepSize);
   const reserved = quantity * entryCost;
   if (![quantity, reserved].every(Number.isFinite) || quantity <= 0 || quantity * plan.entry < plan.minNotional || reserved > account.cash + 1e-8) throw new Error("Available cash is below the exchange minimum order size.");
+  return { quantity, reserved, maxLoss: quantity * perUnitLoss };
+}
+export function reservePosition(account: PaperAccount, setup: MarketSetup, riskPercent: number, at = new Date().toISOString()): PaperAccount {
+  const { quantity, reserved } = previewPosition(account, setup, riskPercent, at);
   const signal: TrackedSignal = { setup: structuredClone(setup), publishedAt: at, status: "PENDING", enteredAt: null, entryFill: null, exitAt: null, exitFill: null, lastEvaluatedTime: 0, highestTarget: 0, realizedReturnPct: null, events: [] };
   const next = structuredClone(account);
   next.cash -= reserved;

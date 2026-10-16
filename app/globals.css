@@ -1080,6 +1080,100 @@ h1 { font-size: clamp(29px, 2.2vw, 39px); font-weight: 650; line-height: 1.28; l
 .evidence-audit summary { cursor: pointer; color: #acc5ff; font-weight: 500; }
 .evidence-audit p { color: var(--muted); margin: 16px 0; }
 .evidence-hash { display: block; font-size: 13px; overflow-wrap: anywhere; }
+
+/* Consistent readable content: adapt the container before reducing the type. */
+.app-body, main, .page-heading > div, .panel-heading > div, .section-heading > div,
+.asset-pair, .asset-pair > div, .chart-studio-title, .candle-inspector-heading > div,
+.workspace-switch, .brand > span:last-child, .trade-detail-grid > div { min-width: 0; }
+.nav-item { white-space: normal; font-size: 16px; }
+.nav-item > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.nav-item > b, .brand-mark, button > svg { flex-shrink: 0; }
+.workspace-switch strong { white-space: normal; line-height: 1.5; }
+.page-actions, .panel-heading, .section-heading { flex-wrap: wrap; }
+.panel-heading > div, .section-heading > div { flex: 1 1 220px; }
+.panel-heading h2, .section-heading h2 { flex-wrap: wrap; line-height: 1.4; }
+.page-actions > button { min-height: 44px; height: auto; white-space: normal; padding-block: 10px; line-height: 1.4; }
+.page-heading p, .section-heading p, .panel-heading p, .stat-card p,
+.execution-note, .reason-content p, .table-footer, .research-reference,
+.trade-cost-note, .chart-instruction, .research-scope-note { overflow-wrap: anywhere; text-wrap: pretty; line-height: 1.75; }
+.panel-heading > div > p, .section-heading p, .stat-card > p, .execution-note,
+.reason-toggle, .sizing-toggle, .score-note, .table-footer, .trade-cost-note { font-size: 15px; }
+.stat-card > span { font-size: 15px; }
+.stat-card > strong { flex-wrap: wrap; overflow-wrap: anywhere; }
+.stat-suffix { font-size: 14px; }
+.asset-pair strong, .research-identity .asset-pair strong { white-space: normal; overflow-wrap: anywhere; }
+.research-identity, .opportunity-top { flex-wrap: wrap; row-gap: 12px; }
+.opportunity-price, .opportunity-bottom { flex-wrap: wrap; }
+.opportunity-price strong { overflow-wrap: anywhere; white-space: normal; }
+.opportunity-bottom > span { white-space: normal; font-size: 14px; }
+.opportunity-bottom b { font-size: 14px; }
+.opportunity-price .sparkline { max-width: 100%; }
+.quote-observation, .live-market-price small { display: block; font-size: 13px; color: #a5b7d1; line-height: 1.7; font-weight: 400; letter-spacing: 0; }
+.live-market-price strong { font-size: 16px; font-weight: 550; }
+.data-table { font-variant-numeric: tabular-nums; }
+.data-table th { font-size: 14px; line-height: 1.6; white-space: normal; }
+.market-table { min-width: 1050px; }
+.table-scroll { max-width: 100%; }
+.level-row { display: grid; grid-template-columns: minmax(74px, 1fr) minmax(0, 1.1fr) auto; gap: 9px; align-items: center; }
+.level-row > span:first-child { min-width: 0; font-size: 15px; line-height: 1.5; }
+.level-row > strong { min-width: 0; text-align: right; font-size: 16px; overflow-wrap: anywhere; }
+.level-row > span:last-child { margin-left: 0; font-size: 14px; text-align: right; white-space: nowrap; }
+.sizing-toggle { flex-wrap: wrap; gap: 8px; text-align: left; line-height: 1.6; }
+.sizing-toggle > span { margin-left: auto; white-space: nowrap; }
+.risk-reward { flex-wrap: wrap; gap: 10px; }
+.risk-reward strong { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.qualification-check strong { flex-wrap: wrap; }
+.timeframe-agreement strong { font-size: 16px; flex-wrap: wrap; overflow-wrap: anywhere; }
+.timeframe-agreement > div { min-width: 0; }
+.portfolio-stats { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.portfolio-equity > div { flex-wrap: wrap; gap: 14px; }
+.portfolio-equity strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.trade-detail-grid strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.trade-detail-grid span, .trade-targets > span { font-size: 14px; }
+.initial-capital input { max-width: 100%; }
+.evidence-controls { flex-wrap: wrap; }
+.evidence-controls > span { margin-left: 0; overflow-wrap: anywhere; }
+.chart-command-bar, .chart-command-actions, .chart-navigation-bar, .chart-settings-actions { gap: 10px; flex-wrap: wrap; }
+.chart-command { min-height: 42px; font-size: 15px; }
+.chart-command > span { white-space: normal; }
+.chart-command-actions select { max-width: 100%; font-size: 15px; }
+.chart-navigation-bar > div { flex-wrap: wrap; }
+.study-number { flex: 1 1 80px; min-width: 0; }
+.study-number input { width: 100%; }
+.chart-appearance select { max-width: 100%; }
+.chart-ruler { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+.ruler-overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
+.ruler-overlay.active { pointer-events: auto; touch-action: none; cursor: crosshair; }
+.ruler-readout, .ruler-hint { position: absolute; left: 12px; max-width: calc(100% - 90px); padding: 12px 15px; background: #14243bf2; border: 1px solid #6484b2; border-radius: 7px; color: #c8d9ef; pointer-events: none; box-shadow: 0 6px 20px #050b1850; }
+.ruler-readout > span { display: block; font-size: 13px; color: #a9bfdc; }
+.ruler-readout > strong { display: block; font-size: 25px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ruler-readout > div { display: flex; gap: 12px; flex-wrap: wrap; font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ruler-readout b { font-weight: 500; }
+.ruler-readout small { display: block; margin-top: 4px; color: #a9bfdc; font-size: 13px; }
+.ruler-hint { top: 12px; font-size: 14px; line-height: 1.6; }
+@media (max-width: 1100px) { .research-panel { display: block; } }
+@media (min-width: 801px) {
+  .sidebar { width: 252px; }
+  .app-body { margin-left: 252px; }
+}
+@media (max-width: 580px) {
+  .portfolio-stats { grid-template-columns: minmax(0, 1fr); }
+  .stat-grid.three .stat-card { display: block; }
+  .stat-grid.three .stat-card > strong { margin-top: 12px; }
+  .stat-card > strong { font-size: 29px; }
+  .page-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .page-actions > button:last-child { grid-column: 1 / -1; }
+  .chart-command-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .chart-command-actions select { width: 100%; grid-column: 1 / -1; }
+  .chart-command-actions .chart-command { font-size: 15px; padding: 10px; }
+  .chart-command-actions .chart-command span { font-size: 15px; }
+  .chart-ranges button { padding: 8px; }
+  .timeframe-agreement { grid-template-columns: minmax(0, 1fr); }
+  .timeframe-agreement > div { border-right: 0; padding: 12px 17px; }
+  .timeframe-agreement strong { font-size: 17px; }
+  .ruler-readout { left: 8px; padding: 10px; }
+  .evidence-constraints { overflow-wrap: anywhere; }
+}
 @media (max-width: 700px) {
   .scanner-evidence { padding: 20px; }
   .evidence-heading { flex-direction: column; gap: 16px; }

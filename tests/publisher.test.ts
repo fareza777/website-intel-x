@@ -75,6 +75,21 @@ describe("scheduled publisher", () => {
     expect(result.state.signals[0].setup.plan!.entry).toBe(100);
     expect(prior.signals[0].status).toBe("PENDING");
   });
+  it.each(["empty", "truncated"])("reports %s closed execution history without inventing a terminal outcome", async (coverage) => {
+    const dir = await directory(), prior = publishSignals(emptyState(), snapshot());
+    const first = Date.parse("2026-10-15T13:00:00Z"), evaluationTime = first + 3 * 3_600_000;
+    const candle: Candle = { time: first, closeTime: first + 3_599_999, open: 105, high: 108, low: 102, close: 106, volume: 10, quoteVolume: 1060, takerBuyVolume: 6 };
+    const market = snapshot(); market.generatedAt = new Date(evaluationTime).toISOString();
+    const result = await runPublisher({ directory: dir, previous: prior, now: evaluationTime, scan: async () => market, candles: async () => coverage === "empty" ? [] : [candle] });
+    expect(result.state.snapshot!.status).toBe("partial");
+    expect(result.state.snapshot!.generatedAt).toBe("2026-10-15T16:00:00.000Z");
+    expect(result.state.snapshot!.dataAsOf).toBe("2026-10-15T11:59:59.999Z");
+    expect(result.state.signals[0].status).toBe("PENDING");
+    expect(result.state.signals[0].entryFill).toBeNull();
+    expect(result.state.signals[0].setup).toEqual(prior.signals[0].setup);
+    const report = JSON.parse(await readFile(path.join(dir, "scan-report.json"), "utf8"));
+    expect(report.evaluationErrors).toContainEqual(expect.objectContaining({ symbol: "BTCUSDT", message: expect.stringMatching(/incomplete.*history|history.*incomplete/i) }));
+  });
   it("uses completion publication time when a scan crosses an hourly boundary", async () => {
     const dir = await directory();
     const market = snapshot(); market.generatedAt = "2026-10-15T09:59:55Z";

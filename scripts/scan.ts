@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { AnalyticsReport, Candle, MarketSnapshot, SignalEvent, StoredState, TrackedSignal } from "../lib/types";
-import { activeStatuses, advanceSignal, emptyState, executionInterval, executionIntervalMs, publishSignals, uniqueEvents } from "../lib/tracking";
+import { activeStatuses, advanceSignal, emptyState, executionInterval, executionIntervalMs, hasCompleteSignalHistory, publishSignals, uniqueEvents } from "../lib/tracking";
 import { getCandles, getExchangeTime } from "../lib/market/binance";
 import { scanMarket } from "../lib/market/scanner";
 import { dataDirectory } from "../lib/storage";
@@ -185,8 +185,7 @@ export async function runPublisher(options: PublisherOptions): Promise<{ exitCod
         try {
           const candles = await (options.candles ?? getCandles)(signal.setup.symbol, executionInterval(signal), 1_000, candleStartTime(signal));
           evaluated[index] = advanceSignal(signal, candles, now);
-          const gap = evaluated[index].events.find((event) => event.type === "DATA GAP");
-          if (gap && evaluated[index].lastEvaluatedTime === signal.lastEvaluatedTime) evaluationErrors.push({ symbol: signal.setup.symbol, message: "Outcome evaluation paused: missing closed execution history" });
+          if (!hasCompleteSignalHistory(evaluated[index], now)) evaluationErrors.push({ symbol: signal.setup.symbol, message: "Outcome evaluation paused: incomplete closed execution history" });
         } catch { evaluationErrors.push({ symbol: signal.setup.symbol, message: "Outcome evaluation deferred: closed execution data unavailable" }); }
       }
     }));

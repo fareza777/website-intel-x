@@ -158,12 +158,13 @@ describe("public Binance candle retrieval", () => {
 });
 
 describe("bounded public spot quotes", () => {
-  it("coalesces a normalized batch and preserves the actual receipt time across cache reads", async () => {
+  function ticker(symbol: string, price: string) { return { symbol, lastPrice: price, priceChangePercent: "0", quoteVolume: "1000", openTime: Date.now() - 86_400_000, closeTime: Date.now() }; }
+  it("coalesces a normalized batch and preserves the exchange observation time across cache reads", async () => {
     vi.useFakeTimers(); vi.setSystemTime(Date.UTC(2026, 9, 15, 12));
     const requests: URL[] = [];
     vi.stubGlobal("fetch", async (url: string) => {
       const parsed = new URL(String(url)); requests.push(parsed);
-      return Response.json([{ symbol: "BTCUSDT", price: "65000.25" }, { symbol: "ETHUSDT", price: "2800.5" }]);
+      return Response.json([ticker("BTCUSDT", "65000.25"), ticker("ETHUSDT", "2800.5")]);
     });
     const api = await import("../lib/market/binance");
     const first = await api.getSpotPrices([" ethusdt ", "BTCUSDT", "BTCUSDT"]);
@@ -173,14 +174,14 @@ describe("bounded public spot quotes", () => {
     const repeated = await api.getSpotPrices(["BTCUSDT", "ETHUSDT"]);
     expect(repeated).toEqual(first);
     expect(requests).toHaveLength(1);
-    expect(requests[0].pathname).toBe("/api/v3/ticker/price");
+    expect(requests[0].pathname).toBe("/api/v3/ticker/24hr");
     expect(JSON.parse(requests[0].searchParams.get("symbols")!)).toEqual(["BTCUSDT", "ETHUSDT"]);
   });
 
   it("receives a new exchange quote on the next 30-second display refresh", async () => {
     vi.useFakeTimers(); vi.setSystemTime(Date.UTC(2026, 9, 15, 12));
     let requests = 0;
-    vi.stubGlobal("fetch", async () => Response.json([{ symbol: "BTCUSDT", price: String(65000 + ++requests) }]));
+    vi.stubGlobal("fetch", async () => Response.json([ticker("BTCUSDT", String(65000 + ++requests))]));
     const api = await import("../lib/market/binance");
     const first = await api.getSpotPrices(["BTCUSDT"]);
     await vi.advanceTimersByTimeAsync(30_000);
@@ -206,7 +207,7 @@ describe("bounded public spot quotes", () => {
     { payload: [{ symbol: "ETHUSDT", price: "2800" }] },
     { payload: [{ symbol: "BTCUSDT", price: "65000" }, { symbol: "BTCUSDT", price: "65001" }] },
   ])("rejects malformed, missing or duplicated requested quotes $payload", async ({ payload }) => {
-    vi.stubGlobal("fetch", async () => Response.json(payload));
+    vi.stubGlobal("fetch", async () => Response.json(payload.map(row => ticker(row.symbol, row.price))));
     const api = await import("../lib/market/binance");
     await expect(api.getSpotPrices(["BTCUSDT"])).rejects.toThrow(/quote|price|symbol/i);
   });

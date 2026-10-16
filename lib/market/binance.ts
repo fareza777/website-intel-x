@@ -1,4 +1,4 @@
-import type { Candle, Timeframe } from "../types";
+import type { Candle, SpotQuote, Timeframe } from "../types";
 
 const HOSTS = ["https://data-api.binance.vision", "https://api.binance.com", "https://api1.binance.com"];
 export const INTERVAL_MS: Record<Timeframe, number> = { "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
@@ -224,27 +224,33 @@ export interface ExchangeSymbol {
 
 export interface Ticker24h { symbol: string; price: number; change24h: number; quoteVolume24h: number }
 
-/** One bounded public batch. Cached observations retain their original receipt timestamp. */
-export async function getSpotPrices(symbols: string[]): Promise<{ symbol: string; price: number; asOf: string }[]> {
+/** Price and rolling statistics share an exchange timestamp. Batches of 20 minimize request weight. */
+export async function getSpotPrices(symbols: string[]): Promise<SpotQuote[]> {
   if (!Array.isArray(symbols) || symbols.length > 50) throw new MarketDataError("Spot quote batches must contain at most 50 symbols");
   if (!symbols.length) return [];
   const normalized = [...new Set(symbols.map((symbol) => {
     if (typeof symbol !== "string") throw new MarketDataError("Invalid spot quote symbol");
     return normalizeSymbol(symbol);
   }))].sort();
-  const entry = await request("ticker/price", { symbols: JSON.stringify(normalized) }, 15_000);
-  if (!Array.isArray(entry.data)) throw new MarketDataError("Invalid spot quote response");
-  const prices = new Map<string, number>();
-  for (const raw of entry.data) {
-    const row = object(raw);
-    const price = number(row.price);
-    if (typeof row.symbol !== "string" || !normalized.includes(row.symbol) || prices.has(row.symbol)) throw new MarketDataError("Unexpected or duplicate spot quote symbol");
-    if (!Number.isFinite(price) || price <= 0) throw new MarketDataError("Invalid public spot quote price");
-    prices.set(row.symbol, price);
-  }
-  if (prices.size !== normalized.length) throw new MarketDataError("Missing requested spot quote symbols");
-  const asOf = new Date(entry.receivedAt).toISOString();
-  return normalized.map((symbol) => ({ symbol, price: prices.get(symbol)!, asOf }));
+  const batches = Array.from({ length: Math.ceil(normalized.length / 20) }, (_, i) => normalized.slice(i * 20, (i + 1) * 20));
+  const observations = await Promise.all(batches.map(async batch => {
+    const entry = await request("ticker/24hr", { symbols: JSON.stringify(batch), type: "FULL" }, 15_000);
+    if (!Array.isArray(entry.data)) throw new MarketDataError("Invalid spot quote response");
+    const quotes = new Map<string, SpotQuote>();
+    for (const raw of entry.data) {
+      const row = object(raw);
+      const price = number(row.lastPrice), change24h = number(row.priceChangePercent), quoteVolume24h = number(row.quoteVolume);
+      const closeTime = number(row.closeTime), openTime = number(row.openTime);
+      if (typeof row.symbol !== "string" || !batch.includes(row.symbol) || quotes.has(row.symbol)) throw new MarketDataError("Unexpected or duplicate spot quote symbol");
+      if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(change24h) || change24h < -100 || !Number.isFinite(quoteVolume24h) || quoteVolume24h < 0) throw new MarketDataError("Invalid public spot quote price or statistics");
+      if (!Number.isSafeInteger(closeTime) || !Number.isSafeInteger(openTime) || openTime < 0 || openTime >= closeTime
+        || entry.receivedAt - closeTime > 120_000 || closeTime - entry.receivedAt > 5_000) throw new MarketDataError("Spot quote observation is stale or invalid", "stale");
+      quotes.set(row.symbol, { symbol: row.symbol, price, change24h, quoteVolume24h, asOf: new Date(closeTime).toISOString() });
+    }
+    if (quotes.size !== batch.length) throw new MarketDataError("Missing requested spot quote symbols");
+    return batch.map(symbol => quotes.get(symbol)!);
+  }));
+  return observations.flat();
 }
 
 /** A single exchangeInfo GET supplies the tradable universe and all price/lot filters. */

@@ -13,6 +13,14 @@ export function freshQuotePrice(quote: SpotQuote | undefined, symbol: string, no
   return Number.isFinite(age) && age >= -5_000 && age <= 120_000 ? quote.price : null;
 }
 
+/** Statistics must belong to the same fresh ticker; frozen scan values are not a fallback. */
+export function freshQuoteStats(quote: SpotQuote | undefined, symbol: string, now: number): { change24h: number; quoteVolume24h: number } | null {
+  const change24h = quote?.change24h, quoteVolume24h = quote?.quoteVolume24h;
+  if (freshQuotePrice(quote, symbol, now) === null || typeof change24h !== "number" || typeof quoteVolume24h !== "number"
+    || !Number.isFinite(change24h) || !Number.isFinite(quoteVolume24h) || change24h < -100 || quoteVolume24h < 0) return null;
+  return { change24h, quoteVolume24h };
+}
+
 /** Keep portfolio marks and the selected market available even with a full radar. */
 export function quoteSubscription(visible: string[], active: string[], selected?: string): string[] {
   return [...new Set([...active, ...(selected ? [selected] : []), ...visible])].slice(0, 50).sort();

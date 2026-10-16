@@ -2,7 +2,7 @@ export type Timeframe = "15m" | "1h" | "4h" | "1d";
 export type ContextTimeframe = Exclude<Timeframe, "15m">;
 export type Action = "BUY" | "WAIT" | "NO TRADE";
 export type Regime = "BULLISH" | "BEARISH" | "SIDEWAYS" | "HIGH VOLATILITY";
-export interface SpotQuote { symbol: string; price: number; asOf: string }
+export interface SpotQuote { symbol: string; price: number; asOf: string; change24h?: number; quoteVolume24h?: number }
 export interface Candle {
   /** Binance candle opening time: Unix milliseconds. Convert to seconds only for charts. */
   time: number;
