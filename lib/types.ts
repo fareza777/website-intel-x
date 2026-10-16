@@ -45,6 +45,10 @@ export interface VolumeIntelligence {
   profile: { price: number; volume: number }[];
 }
 export interface MarketSetup {
+  /** Frozen rule version, entry trigger and horizon-specific policy; absent on legacy originals. */
+  strategyVersion?: string;
+  entryModel?: "BREAKOUT" | "STRUCTURE_RECLAIM" | "PULLBACK";
+  policy?: { maximumAtrPct: number; maximumStopRiskPct: number; minimumBuyScore: number };
   /** Diagnostic candidate levels, also retained when the trade plan is rejected. */
   riskReview?: { entry: number; stopLoss: number; costedLossPct: number; maximumLossPct: number; feeBps: number; slippageBps: number };
   /** Observed rule checks, frozen with the research; older originals may omit them. */
@@ -79,7 +83,7 @@ export interface MarketSetup {
 export interface QualificationCheck {
   id: string;
   label: string;
-  requiredFor: "plan" | "buy";
+  requiredFor: "plan" | "buy" | "context";
   passed: boolean;
   detail: string;
 }

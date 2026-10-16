@@ -6,6 +6,10 @@ Live application: [cryptointel-x-nu.vercel.app](https://cryptointel-x-nu.vercel.
 
 The 15M, 1H, 4H, and 1D horizon selector changes the actual recommendation and setup score. Equal scores can still occur when the independently measured conditions agree. Recommendation publication remains hourly; new 15M paper entries require a decision within 30 minutes. Chart Studio provides configurable indicators, synchronized panes, candle percentages, presets and saved settings. Indonesian contextual guides explain every page and the actual strategy. See [chart and strategy evidence](docs/chart-and-strategy-evidence.md).
 
+## Current qualification · cx-spot-4
+
+BUY requires the safety checks, score ≥78, a valid decision uptrend, and either a confirmed breakout/structure reclaim or an EMA21 pullback recovery. MACD, preferred RSI, VWAP and taker-buy add quality without each acting as a veto. Volatility and position-stop tolerances scale by timeframe, while position sizing retains the chosen account-risk budget. Legacy originals keep their original rules and levels. The [v4 audit](docs/qualification-v4-audit-2026-10-16.md) records the reported daily score97 case, matched real-data comparison and performance limitations.
+
 ## Local virtual portfolio
 
 Take a qualified BUY from the trade workspace to reserve virtual cash against the exact displayed plan. The saved recommendation keeps its original timeframe, score, levels, costs, expiry and holding period. Each asset/horizon can have one active local simulation; different horizons are independent and share the same finite cash balance. WAIT research never becomes an executed trade without a new qualified BUY.
@@ -84,7 +88,7 @@ The [2026-10-15 accuracy audit](docs/accuracy-audit-2026-10-15.md) documents rea
 
 ## Production scanner replay
 
-Run `npx tsx scripts/validate-scanner.ts --days 90` to replay the actual decision, publication, lifecycle and portfolio functions on real BTC/ETH/SOL history. The daily publisher attaches this validated compact report to state. Strategy Lab displays independent pair/horizon accounts, costs, completed trade counts, marked returns, drawdown, chronological windows and inspectable trades. This is retrospective research with limited evidence, not an assertion of proven profitability; the Python baseline comparison remains separate.
+Run `npx tsx scripts/validate-scanner.ts --days 90` to replay the actual decision, publication, lifecycle and portfolio functions on real BTC/ETH/SOL/INJ history. The daily publisher attaches this validated compact report to state. Strategy Lab displays independent pair/horizon accounts, costs, completed trade counts, marked returns, drawdown, chronological windows and inspectable trades. This is retrospective research with limited evidence, not an assertion of proven profitability; the Python baseline comparison remains separate.
 
 ## Durable data and retention
 

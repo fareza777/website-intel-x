@@ -30,17 +30,26 @@ const labels: Record<string, [string, string]> = {
 function decisionFrames(timeframe: Timeframe): Timeframe[] { return timeframe === "15m" ? ["15m", "1h", "4h"] : timeframe === "1h" ? ["1h", "4h", "1d"] : timeframe === "4h" ? ["4h", "1d"] : ["1d"]; }
 export function explainCheck(check: QualificationCheck, setup: MarketSetup) {
   const timeframe = setup.timeframe ?? "1h", base = setup.indicators?.[timeframe];
-  const [label, meaning] = labels[check.id] ?? [check.label, check.detail];
+  let [label, meaning] = labels[check.id] ?? [check.label, check.detail];
+  if (setup.policy) {
+    if (check.id === "alignment") { label = "Tren naik untuk spot long"; meaning = "Close harus di atas EMA50 dan EMA50 di atas EMA200. Konteks lebih tinggi boleh netral, tetapi tidak bearish. Susunan EMA21 ikut skor, bukan veto tersendiri."; }
+    if (check.id === "structure") { label = "Pemicu entry sudah terkonfirmasi"; meaning = "Cukup satu jalur: breakout/struktur pada candle keputusan dengan volume ≥1×, atau pantulan EMA21 setelah pullback dengan close naik di atas close sebelumnya. Keduanya memakai candle tertutup."; }
+    if (check.requiredFor === "context") {
+      meaning = `${check.id === "rsi" ? "RSI 45–70 adalah rentang yang disukai. RSI >78 tetap ditolak oleh aturan overextension." : check.id === "participation" ? "Volume relatif dan taker-buy menambah kualitas. Tidak harus taker-buy ≥52% untuk entry; breakout tetap perlu volume ≥1×, sedangkan pullback boleh pada volume normal/rendah." : check.id === "momentum" ? "MACD positif pada timeframe terkait mendukung momentum dan menambah skor; MACD yang belum positif tetap boleh disertai pemicu harga yang valid." : check.id === "vwap" ? "Close di atas VWAP memberi dukungan harga terhadap rata-rata sesi. Close di bawahnya mengurangi skor, tanpa membatalkan pemicu harga sendirian." : labels[check.id]?.[1] ?? check.detail} Ini indikator pendukung; tidak memveto entry sendirian.`;
+      if (check.id === "rsi") label = "RSI di rentang yang disukai";
+    }
+  }
   let measured = "";
   if (["trend_safety", "alignment"].includes(check.id)) measured = decisionFrames(timeframe).map(tf => `${tf.toUpperCase()} ${setup.indicators?.[tf]?.trend === "bullish" ? "naik" : setup.indicators?.[tf]?.trend === "bearish" ? "turun" : "netral"}`).join(" · ");
   if (check.id === "risk") measured = positionLoss(setup) === null ? "Level stop atau target yang valid belum terbentuk." : `Estimasi rugi posisi ${positionLoss(setup)!.toFixed(2)}% · batas kebijakan ${setup.riskReview?.maximumLossPct ?? 8}%.`;
-  if (check.id === "rsi" && base) measured = `${timeframe.toUpperCase()} RSI ${base.rsi.toFixed(1)} · rentang BUY 45–70.`;
-  if (check.id === "volatility" && base) measured = `${timeframe.toUpperCase()} ATR ${(base.atr / setup.price * 100).toFixed(2)}% dari harga · batas kebijakan 6%.`;
+  if (check.id === "rsi" && base) measured = `${timeframe.toUpperCase()} RSI ${base.rsi.toFixed(1)} · ${check.requiredFor === "context" ? "rentang preferensi" : "rentang BUY"} 45–70.`;
+  if (check.id === "volatility" && base) measured = `${timeframe.toUpperCase()} ATR ${(base.atr / setup.price * 100).toFixed(2)}% dari harga · batas kebijakan ${setup.policy?.maximumAtrPct ?? 6}%.`;
   if (check.id === "extension" && base) measured = `RSI ${base.rsi.toFixed(1)} · jarak dari EMA21 ${base.atr > 0 ? ((setup.price - base.ema21) / base.atr).toFixed(2) : "—"} ATR.`;
   if (check.id === "score") measured = `${setup.score}/100 · minimal WAIT 50; batas skor awal BUY 78.`;
   if (check.id === "liquidity") measured = `Volume 24 jam ${(setup.quoteVolume24h / 1e6).toFixed(2)} juta USDT · minimum 5 juta.`;
   if (check.id === "participation" && setup.volume) measured = `Volume relatif ${setup.volume.relativeVolume.toFixed(2)}× · taker-buy ${(setup.volume.buyPressure * 100).toFixed(1)}%.`;
   if (check.id === "freshness") measured = `Candle keputusan ${new Date(setup.asOf).toLocaleString("id-ID")}. Status pemeriksaan dibekukan saat scan.`;
+  if (check.id === "structure" && setup.policy) measured = setup.entryModel === "BREAKOUT" ? "Breakout high 20 candle sebelumnya." : setup.entryModel === "STRUCTURE_RECLAIM" ? "Struktur bullish dikonfirmasi pada candle keputusan." : setup.entryModel === "PULLBACK" ? "Pullback dan recovery EMA21 terkonfirmasi." : "Belum ada pemicu harga yang lolos pada candle keputusan.";
   return { label, meaning, measured };
 }
 export function explainDecision(setup: MarketSetup) {
@@ -60,5 +69,6 @@ export function explainDecision(setup: MarketSetup) {
     const missing = setup.qualification?.filter(c => !c.passed && c.requiredFor === "buy").slice(0, 2).map(c => explainCheck(c, setup).label) ?? [];
     return { title: "Pantau dulu, konfirmasi belum lengkap", summary: missing.length ? `Syarat yang belum terpenuhi: ${missing.join("; ")}. Rencana WAIT belum dapat diambil sebagai trade virtual.` : "Tunggu tren, momentum, struktur dan volume memenuhi seluruh aturan BUY pada scan baru." };
   }
+  if (setup.policy) return { title: `${setup.entryModel === "PULLBACK" ? "Pullback EMA21" : setup.entryModel === "STRUCTURE_RECLAIM" ? "Reclaim struktur" : "Breakout terkonfirmasi"} · siap diambil sebagai trade virtual`, summary: "Semua syarat wajib lolos; indikator pendukung tidak harus sempurna. Ambil rencana untuk mulai mencatat simulasi. Fill tetap menunggu harga entry, dan ukuran posisi dibatasi anggaran risiko akun setelah biaya." };
   return { title: "Setup memenuhi aturan pada saat scan", summary: "Entry tetap menunggu harga limit yang tercantum. Stop, target dan ukuran posisi dihitung dari data, biaya dan anggaran risiko; hasil trade masih perlu dievaluasi." };
 }

@@ -18,7 +18,7 @@ Native [Lightweight Charts percentage mode](https://tradingview.github.io/lightw
 
 ## Four independent research horizons
 
-`cx-spot-3` adds 15M without changing the numerical gates of the older three horizons. 15M scores and decisions use their own closed 15-minute candle and 1H/4H confirmation, with all context cut off at the decision close. A failed 15M download does not suppress otherwise valid 1H/4H/1D research. All feeds are downloaded once per asset and reused.
+`cx-spot-4` keeps the four independent horizons introduced in v3 and revises qualification as documented in [the v4 audit](qualification-v4-audit-2026-10-16.md). 15M scores and decisions use their own closed 15-minute candle and 1H/4H confirmation, with all context cut off at the decision close. A failed 15M download does not suppress otherwise valid 1H/4H/1D research. All feeds are downloaded once per asset and reused.
 
 | Horizon | Confirmation context | Unfilled expiry | Maximum holding | Execution bars |
 | --- | --- | --- | --- | --- |
@@ -33,7 +33,7 @@ Recommendation publication remains **hourly at minute 17**, as requested. A 15-m
 
 The strategy combines EMA trend agreement, RSI, MACD, UTC VWAP, relative volume, actual taker-buy share and confirmed price structure. The guide lists every gate and the score allocation. ATR and confirmed support determine the stop; target levels and position sizing include both-side costs, tick/lot rounding and capital constraints.
 
-The 0.25–8% allowed costed position loss is an application policy, not a universally validated trading threshold. A loss of 8% on a position is different from risking 8% of an account. The account budget determines quantity; the explanation panel shows both quantities and diagnostic candidate levels for a rejected stop.
+Minimum costed position loss remains 0.25%; maximum ATR / position-stop loss is 4%/8% for 15M, 6%/10% for 1H, 10%/20% for 4H and 12%/25% for 1D. These are fixed application tolerances, not universally validated trading thresholds. A specific breakout/reclaim or EMA21 pullback and decision uptrend are required; MACD, preferred RSI, VWAP and taker-buy are supporting quality measurements rather than separate vetoes. A loss of 8% on a position is different from risking 8% of an account. The account budget determines quantity; the explanation panel shows both quantities and diagnostic candidate levels for a rejected stop.
 
 Primary references inspected:
 
@@ -46,7 +46,7 @@ Using standard indicators or consulting a repository does **not** validate this 
 
 ## Replay of the production scanner
 
-`npx tsx scripts/validate-scanner.ts --days 90` downloads real Binance candles for a predeclared BTC/ETH/SOL universe, then reuses `analyzeSymbol`, `publishSignals`, `advanceSignal`, `reservePosition` and `applyPaperUpdates`. There is no substitute backtest rule set or parameter optimization. Each pair/horizon uses an independent 10,000 USDT account with a risk budget of 1% of initial capital. Results cannot be summed into the return of a shared portfolio.
+`npx tsx scripts/validate-scanner.ts --days 90` downloads real Binance candles for a predeclared BTC/ETH/SOL/INJ universe, then reuses `analyzeSymbol`, `publishSignals`, `advanceSignal`, `reservePosition` and `applyPaperUpdates`. There is no substitute backtest rule set or parameter optimization. Each pair/horizon uses an independent 10,000 USDT account with a risk budget of 1% of initial capital. Results cannot be summed into the return of a shared portfolio.
 
 Scans assume hourly publication at :17. Each frame has 259 closed bars and its own decision-time context cutoff. Historical rolling ticker values are approximated from 24 contiguous closed hourly candles. Current exchange lot/tick/minimum filters and the present-day universe introduce historical-filter and selection limitations. Real GitHub publication can occur later; this replay is not a reproduction of actual publication latency or trade-level exchange fills.
 
@@ -54,6 +54,6 @@ Old signals advance before a new scan; publication, WAIT supersession, deduplica
 
 Profit factor uses net realized currency P/L; expectancy uses mean net completed-trade percentage. Undefined statistics are null. Returns include mark-to-market open exposure; win rate counts completed trades only. Drawdown uses hourly scan marks, so it does not measure the worst unobserved intrabar move. Daily sampled curves are compact display data. Accounts continue across three descriptive chronological windows; these thirds are not untouched out-of-sample validation.
 
-Fewer than 30 completed trades triggers a sample warning, not a significance test. The actual 90-day run observed few trades and mostly negative returns; it does not establish a profitable edge. Strategy Lab displays this report separately from the Python baseline walk-forward comparison and the forward public Signal Autopsy ledger.
+Fewer than 30 completed trades triggers a sample warning, not a significance test. The matched v3/v4 90-day audit observed more qualified trades but mixed, mostly unfavorable intraday results and a small daily sample. It does not establish a profitable edge; see the dated v4 audit for actual counts and returns. Strategy Lab displays this report separately from the Python baseline walk-forward comparison and the forward public Signal Autopsy ledger.
 
 The daily workflow refreshes the replay, validates the compact report and attaches it to published state. Missing/corrupt replacement files preserve prior valid evidence and its timestamp. Failed symbols are explicit, not treated as zero-return successful tests. Raw historical candle files stay under ignored `data/validation-candles/`; only the compact report and normal state reach `market-data`.

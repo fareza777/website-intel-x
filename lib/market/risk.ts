@@ -31,7 +31,7 @@ export function positionSize(plan: TradePlan, capital: number, riskPercent: numb
   return { quantity, notional: quantity * plan.entry, riskAmount, maxLoss: quantity * unitLoss };
 }
 
-export interface TradePlanInput { price: number; atr: number; support?: number; tickSize: number; stepSize: number; minNotional: number; feeBps?: number; slippageBps?: number }
+export interface TradePlanInput { price: number; atr: number; support?: number; tickSize: number; stepSize: number; minNotional: number; feeBps?: number; slippageBps?: number; maxRiskPct?: number }
 export interface TradePlanAssessment { plan: TradePlan | null; reason: "invalid_inputs" | "invalid_levels" | "risk_too_high" | "risk_too_low" | "invalid_targets" | null; riskPct: number | null; review?: MarketSetup["riskReview"] }
 export const MIN_SETUP_RISK_PCT = .25;
 export const MAX_SETUP_RISK_PCT = 8;
@@ -41,6 +41,8 @@ export function assessTradePlan(input: TradePlanInput): TradePlanAssessment {
   if (![price, atr, tickSize, stepSize, minNotional].every(Number.isFinite) || price <= 0 || atr <= 0 || tickSize <= 0 || stepSize <= 0 || minNotional < 0) return { plan: null, reason: "invalid_inputs", riskPct: null };
   const feeBps = input.feeBps ?? DEFAULT_COSTS.feeBps;
   const slippageBps = input.slippageBps ?? DEFAULT_COSTS.slippageBps;
+  const maxRiskPct = input.maxRiskPct ?? MAX_SETUP_RISK_PCT;
+  if (!Number.isFinite(maxRiskPct) || maxRiskPct < MIN_SETUP_RISK_PCT || maxRiskPct > 50) return { plan: null, reason: "invalid_inputs", riskPct: null };
   if (![feeBps, slippageBps].every(Number.isFinite) || feeBps < 0 || slippageBps < 0 || feeBps >= 10_000 || slippageBps >= 10_000) return { plan: null, reason: "invalid_inputs", riskPct: null };
   const entry = roundToStep(price - atr * 0.1, tickSize);
   const structuralStop = support !== undefined && Number.isFinite(support) && support < entry ? support - atr * 0.25 : entry - atr * 1.5;
@@ -51,8 +53,8 @@ export function assessTradePlan(input: TradePlanInput): TradePlanAssessment {
   const unitLoss = unitDebit - stopLoss * credit;
   const riskPct = unitLoss / unitDebit * 100;
   if (stopLoss <= 0 || entryZone[0] <= stopLoss || entry <= 0 || !Number.isFinite(riskPct)) return { plan: null, reason: "invalid_levels", riskPct: null };
-  const review = { entry, stopLoss, costedLossPct: riskPct, maximumLossPct: MAX_SETUP_RISK_PCT, feeBps, slippageBps };
-  if (riskPct > MAX_SETUP_RISK_PCT) return { plan: null, reason: "risk_too_high", riskPct, review };
+  const review = { entry, stopLoss, costedLossPct: riskPct, maximumLossPct: maxRiskPct, feeBps, slippageBps };
+  if (riskPct > maxRiskPct) return { plan: null, reason: "risk_too_high", riskPct, review };
   if (riskPct < MIN_SETUP_RISK_PCT) return { plan: null, reason: "risk_too_low", riskPct, review };
   const targets = [2, 3, 4].map((multiple) => {
     const target = roundToStep((unitDebit + multiple * unitLoss) / credit, tickSize, "up");

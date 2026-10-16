@@ -31,13 +31,13 @@ async function main() {
   const now = await getExchangeTime();
   let end = Math.floor(now / HOUR) * HOUR + 17 * 60_000; if (end > now) end -= HOUR;
   const start = end - days * DAY + HOUR;
-  const code = await Promise.all(["lib/market/setup.ts", "lib/market/indicators.ts", "lib/market/risk.ts", "lib/market/structure.ts", "lib/market/volume.ts", "lib/tracking.ts", "lib/paper.ts", "lib/research/replay.ts"].map(file => readFile(file)));
+  const code = await Promise.all(["lib/market/setup.ts", "lib/market/entry.ts", "lib/market/policy.ts", "lib/market/indicators.ts", "lib/market/risk.ts", "lib/market/structure.ts", "lib/market/volume.ts", "lib/tracking.ts", "lib/paper.ts", "lib/research/replay.ts"].map(file => readFile(file)));
   const hash = createHash("sha256"); for (const file of code) hash.update(file);
   const report: ScannerValidationReport = { version: 1, strategyVersion: STRATEGY_VERSION, codeHash: hash.digest("hex"), generatedAt: new Date(now).toISOString(), start: new Date(start).toISOString(), end: new Date(end).toISOString(),
-    symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"], scanIntervalHours: 1, assumedPublicationMinute: 17, closedWindow: 259,
+    symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT", "INJUSDT"], scanIntervalHours: 1, assumedPublicationMinute: 17, closedWindow: 259,
     capitalPerAccount: 10000, initialCapitalRiskPct: 1, ...DEFAULT_COSTS, rows: [], failures: [], notes: [
-      "Replay of the actual analyzeSymbol, publishSignals, advanceSignal, reservePosition and applyPaperUpdates engines. cx-spot-3 adds 15M; older horizon numerical gates are unchanged.",
-      "Predeclared BTC/ETH/SOL selection; each symbol/horizon is a separate 10,000 USDT account. There is no aggregate shared-cash portfolio return. Risk budget is 1% of initial account capital, limited by available cash and current exchange lot/minimum filters.",
+      "Replay of the actual analyzeSymbol, publishSignals, advanceSignal, reservePosition and applyPaperUpdates engines. cx-spot-4 uses explicit breakout/reclaim or EMA21 pullback entries, supporting (non-veto) indicators and horizon-specific risk/volatility policies. Rules were fixed before replay; no parameter search.",
+      "Predeclared BTC/ETH/SOL/INJ selection. INJ is the user-reported high-score qualification case, not a selection based on backtest profitability. Each symbol/horizon is a separate 10,000 USDT account. There is no aggregate shared-cash portfolio return. Risk budget is 1% of initial account capital, limited by available cash and current exchange lot/minimum filters.",
       "Hourly scans at :17 are an assumed publication time. Real GitHub jobs publish later and can be delayed. Each input uses 259 closed bars per frame, matching 260 live klines minus the unfinished bar; analyzeSymbol applies its own decision-close context cutoff.",
       "Historical 24h ticker volume/change is reconstructed from the last 24 contiguous closed hourly bars. This approximates, rather than reproduces, Binance rolling intrabar ticker statistics at :17. Current exchange filters and a fixed present-day universe introduce historical-filter and selection limitations.",
       "New entries ignore any execution candle already underway at publication. 15M uses subsequent full 15-minute bars; other horizons use subsequent full hourly bars. OHLC fills are assumed, not trade-level verified fills.",

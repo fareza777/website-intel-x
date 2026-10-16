@@ -144,7 +144,10 @@ describe("deterministic setup rejection", () => {
     const latest = input.candles["1h"][259];
     const result = analyzeSymbol(input);
     expect(result.structure.some((event) => event.type === "BOS" && event.direction === "bullish" && event.time < latest.closeTime - 2 * hour)).toBe(true);
-    expect(result.action).toBe("WAIT");
+    // The new EMA21 pullback is independently valid; an older BOS is not reused.
+    expect(result.action).toBe("BUY");
+    expect(result.entryModel).toBe("PULLBACK");
+    expect(result.confirmations.join(" ")).not.toMatch(/Recent bullish structure confirmation/);
   });
 
   it("exposes the last closed hourly price even when an unfinished candle trades elsewhere", () => {
@@ -157,8 +160,10 @@ describe("deterministic setup rejection", () => {
     expect(result.action).toBe("BUY");
   });
 
-  it("publishes a conditional WAIT plan when higher timeframes agree but fresh volume is missing", () => {
-    const result = analyzeSymbol(qualifiedInput(false));
+  it("publishes a conditional WAIT plan when the trend is strong but no bullish decision candle confirms entry", () => {
+    const input = qualifiedInput(false), candle = input.candles["1h"].at(-1)!;
+    candle.open = candle.close + .1; candle.high = Math.max(candle.high, candle.open);
+    const result = analyzeSymbol(input);
     expect(result.action).toBe("WAIT");
     expect(result.plan).not.toBeNull();
     expect(result.confirmations.join(" ")).toMatch(/Await/);

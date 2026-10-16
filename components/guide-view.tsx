@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ArrowUpRight, BookOpen, ChevronRight, Search } from "lucide-react";
 import { GUIDE_ARTICLES, GLOSSARY, METHOD_SOURCES, type GuideTopic, type WorkspacePage } from "@/lib/guide";
 import { Button } from "./ui/button";
+import { QUALIFICATION_POLICIES, STRATEGY_VERSION } from "@/lib/market/policy";
 export function GuideView({ topic, onTopic, onNavigate }: { topic: GuideTopic; onTopic: (topic: GuideTopic) => void; onNavigate: (page: WorkspacePage) => void }) {
   const [query, setQuery] = useState("");
   const article = GUIDE_ARTICLES.find(a => a.id === topic) ?? GUIDE_ARTICLES[0];
@@ -19,6 +20,7 @@ export function GuideView({ topic, onTopic, onNavigate }: { topic: GuideTopic; o
       {!!article.metrics.length && <section><h3>Angka dan istilah yang perlu dibaca</h3><dl className="guide-definitions">{article.metrics.map(([title, detail]) => <div key={title}><dt>{title}</dt><dd>{detail}</dd></div>)}</dl></section>}
       {!!article.steps.length && <section><h3>Cara menggunakan</h3><ol className="guide-steps">{article.steps.map(step => <li key={step}>{step}</li>)}</ol></section>}
       {topic === "method" && <>
+        <section><h3>Batas risiko {STRATEGY_VERSION}</h3><p>Batas ini adalah toleransi aplikasi untuk horizon yang berbeda. Anggaran risiko akun tetap mengikuti pilihan Anda; stop yang lebih lebar mengurangi ukuran posisi.</p><div className="table-scroll"><table className="data-table"><thead><tr><th>Horizon</th><th>ATR maksimum</th><th>Rugi posisi maksimum</th><th>Skor BUY minimum</th></tr></thead><tbody>{Object.entries(QUALIFICATION_POLICIES).map(([tf, policy]) => <tr key={tf}><td>{tf.toUpperCase()}</td><td>{policy.maximumAtrPct}%</td><td>{policy.maximumStopRiskPct}%</td><td>{policy.minimumBuyScore}/100</td></tr>)}</tbody></table></div></section>
         <section><h3>Jendela rencana per horizon</h3><div className="table-scroll"><table className="data-table"><thead><tr><th>Horizon</th><th>Konfirmasi tren</th><th>Expiry entry</th><th>Maksimum hold</th><th>Candle eksekusi</th></tr></thead><tbody>{[["15M", "1H + 4H", "6 jam", "18 jam", "15 menit"], ["1H", "4H + 1D", "24 jam", "72 jam", "1 jam"], ["4H", "1D", "72 jam", "216 jam", "1 jam"], ["1D", "1D", "168 jam", "720 jam", "1 jam"]].map(row => <tr key={row[0]}>{row.map(cell => <td key={cell}>{cell}</td>)}</tr>)}</tbody></table></div></section>
         <section><h3>Apa yang dimaksud “sudah diuji”?</h3><p>Pengujian perhitungan memeriksa rumus dan waktu data. Replay mengukur aturan yang sama pada histori nyata. Signal Autopsy mengukur hasil setelah publikasi. Bukti yang kuat memerlukan sampel yang cukup, hasil di beberapa kondisi pasar, biaya realistis dan evaluasi berikutnya tanpa mengubah aturan berdasarkan hasil yang sudah dilihat.</p><p>Strategy Lab menampilkan cakupan dan keterbatasan bukti yang tersedia. Sampel kecil atau hasil negatif tetap menjadi informasi penting untuk memutuskan apakah strategi layak dipercaya.</p><Button variant="outline" onClick={() => onNavigate("strategy")}>Periksa bukti di Strategy Lab<ArrowUpRight size={17} /></Button></section>
       </>}
