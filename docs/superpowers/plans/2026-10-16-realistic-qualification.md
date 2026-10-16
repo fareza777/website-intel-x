@@ -22,8 +22,8 @@
 - [x] Write red tests for high-quality near-neutral taker-buy, a causal EMA pullback, missing triggers, daily stop sizing and unsafe caps. Implement entry detection and horizon risk policies.
 - [x] Version metadata/schema compatibility, compulsory/context UI and Indonesian explanations/guide. Verify frozen legacy imports and account loss budgets.
 - [x] Run a real current scan and matched v3/v4 replay; publish the current version's evidence with explicit limitations. Keep raw candles out of Git.
-- [ ] Independent correctness review, TS/Python tests, lint/typecheck/build and browser checks; push and verify CI, Vercel and fresh official publication.
+- [x] Independent correctness review, TS/Python tests, lint/typecheck/build and browser checks; push and verify CI, Vercel and fresh official publication.
 
-Local review, all calculation suites, production build and the isolated browser paper-trade flow have passed. Remote delivery verification remains pending at the implementation commit.
+Local review, all calculation suites, production build and the isolated browser paper-trade flow passed. Implementation commit `e375c8881c7ad7f9fd887985dd6b5b7e2d683776` passed GitHub Verify run `38852977980` and Vercel production deployment `dpl_32MiuKUi71RgwMkXtTYeh5rQ7aHb`. Official publisher `38852988196` produced data commit `6d094e1055be438a01d696c60cef3a789aeab190`. The live API and browser both confirmed cx-spot-4, INJ 1D quality 97 with BUY and an enabled virtual-trade button. All 31 prior public originals were compared and preserved without modification.
 
 Primary references: Fidelity ATR and RSI guides describe volatility-adaptive stops and persistent overbought readings during trends; QuantConnect Donchian documentation describes trailing high/low channels. These support calculation concepts, not the profitability of these particular thresholds.
