@@ -16,5 +16,7 @@ export const scannerReportSchema: z.ZodType<ScannerValidationReport> = z.object(
     ciLowR: finite.nullable(), ciHighR: finite.nullable(), drawdownR95: finite.min(0).nullable(), exitReasons: z.object({ stopped: count, trail: count, target: count, time: count }),
     histogram: z.array(z.object({ low: finite.nullable(), high: finite.nullable(), count })).max(20), validated: z.boolean() })).max(4).optional(),
   model: z.object({ version: z.string().max(80), trainedThrough: date.nullable(), outOfSample: z.boolean() }).optional(),
+  rotation: z.object({ params: z.object({ lookbackDays: count, holdings: count, regimeSma: count, rebalanceDays: count }), start: date, end: date, rebalances: count, totalReturnPct: finite, btcReturnPct: finite,
+    maxDrawdownPct: finite.min(0).max(100), sharpe: finite.nullable(), exposurePct: finite.min(0).max(100), costBps: finite.min(0), equity: z.array(z.object({ time: date, value: finite.nonnegative(), btc: finite.nonnegative() })).max(2000) }).optional(),
   failures: z.array(z.object({ symbol: z.string().max(30), message: z.string().max(2000) })).max(20), notes: z.array(z.string().max(3000)).max(40),
 }).refine(report => Date.parse(report.end) >= Date.parse(report.start) && Date.parse(report.generatedAt) >= Date.parse(report.end), "Invalid replay time window");

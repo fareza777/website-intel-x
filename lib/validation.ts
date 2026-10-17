@@ -16,7 +16,10 @@ export const planSchema = z.object({
 }).refine(p => p.stopLoss < p.entryZone[0] && p.entryZone[0] <= p.entry && p.entry <= p.entryZone[1] && p.targets[0].price > p.entry && p.targets[1].price > p.targets[0].price && p.targets[2].price > p.targets[1].price && (!p.management || p.management.breakevenStop < p.targets[0].price), "Invalid long research price ordering");
 const featureKeys = ["score", "trendAtr", "slopeAtr", "rsi", "adx", "atrPercentile", "squeeze", "distanceHighAtr", "volumeZ", "buyPressure", "relativeStrength", "beta", "btcTrend", "breadth", "breakout", "reclaim", "pullback", "stopRisk", "swingStructure", "aboveVwap"] as const;
 const finite = z.number().finite();
-const featuresSchema = z.object(Object.fromEntries(featureKeys.map(key => [key, finite])) as Record<(typeof featureKeys)[number], typeof finite>);
+const derivativeKeys = ["oiChange1d", "oiChange7d", "longShortRatio", "topTraderRatio", "takerRatio", "premium3d"] as const;
+const featuresSchema = z.object({ ...Object.fromEntries(featureKeys.map(key => [key, finite])) as Record<(typeof featureKeys)[number], typeof finite>,
+  ...Object.fromEntries(derivativeKeys.map(key => [key, finite.nullable().optional()])) as Record<(typeof derivativeKeys)[number], z.ZodOptional<z.ZodNullable<typeof finite>>>,
+  hasDerivatives: finite.optional() });
 const indicators = z.object({ ema21: positive, ema50: positive, ema200: positive, rsi: nonnegative.max(100), macd: z.number().finite(), macdSignal: z.number().finite(), macdHistogram: z.number().finite(), atr: nonnegative, trend: z.enum(["bullish", "bearish", "neutral"]) });
 export const setupSchema = z.object({
   strategyVersion: z.string().min(1).max(80).optional(),

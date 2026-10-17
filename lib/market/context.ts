@@ -2,12 +2,15 @@ import type { Candle, MarketContextSummary, Timeframe } from "../types";
 import { computeIndicators, ema } from "./indicators";
 import type { CalibrationModel } from "./model";
 import { REGIME } from "./policy";
+import type { DerivativeDay } from "./derivatives";
 
 /** Cross-market inputs shared by every symbol in one scan. All candles must be closed at scan time. */
 export interface MarketContext {
   btc?: Partial<Record<Timeframe, Candle[]>>;
   /** Share of scanned markets closing above their EMA50 on each decision interval. */
   breadth?: Partial<Record<Timeframe, number>>;
+  /** Futures archive days per symbol; features use only days published before the decision. */
+  derivatives?: Record<string, DerivativeDay[]>;
   /** Defaults to the bundled frozen model; null disables model estimates. */
   model?: CalibrationModel | null;
 }

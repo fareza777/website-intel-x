@@ -3,10 +3,11 @@ import { analyzeSymbol } from "../market/setup";
 import { INTERVAL_MS } from "../market/binance";
 import { withExitProfile } from "../market/risk";
 import { EXIT_PROFILES, DEFAULT_EXIT_PROFILE, type ExitProfile } from "../market/policy";
-import { auc, expectedR, FEATURE_KEYS, FEATURE_VERSION, predictProbability, trainLogistic, vectorize, type CalibrationModel, type HorizonModel, type HorizonValidation } from "../market/model";
+import { auc, expectedR, FEATURE_KEYS, FEATURE_VERSION, impute, predictProbability, trainLogistic, vectorize, type CalibrationModel, type HorizonModel, type HorizonValidation, type LogisticModel } from "../market/model";
+import { boostedProbability, trainBoosted, type BoostedModel } from "../market/boosting";
 import { bootstrapMean } from "./stats";
 import { advanceSignal, executionInterval, executionIntervalMs } from "../tracking";
-import { historicalInput, replayContext, type ReplaySource } from "./replay";
+import { derivativeMap, historicalInput, replayContext, type ReplaySource } from "./replay";
 
 const HOUR = 3_600_000;
 export const TIMEFRAMES: Timeframe[] = ["15m", "1h", "4h", "1d"];
@@ -14,7 +15,7 @@ export const EDGE_THRESHOLDS = [0, .1, .2, .3];
 const LEGACY = "legacy";
 
 export interface Candidate {
-  symbol: string; timeframe: Timeframe; publishedAt: number; setup: MarketSetup; features: number[];
+  symbol: string; timeframe: Timeframe; publishedAt: number; setup: MarketSetup; features: (number | null)[];
   /** Would the rule-based fallback (score floor) have published BUY? */
   ruleBuy: boolean;
   /** Realized R per exit profile, null when the limit entry never filled. */
@@ -58,10 +59,11 @@ export function collectCandidates(sources: ReplaySource[], start: number, end: n
   const seen = new Set<string>(), candidates: Candidate[] = [];
   const profiles = [...EXIT_PROFILES, null];
   const total = Math.floor((end - start) / HOUR) + 1;
+  const derivatives = derivativeMap(sources);
   for (let now = start, step = 0; now <= end; now += HOUR, step++) {
     if (onProgress && step % 500 === 0) onProgress(step, total);
     const inputs = sources.map(source => historicalInput(source, now));
-    const context = replayContext(inputs, null);
+    const context = replayContext(inputs, null, derivatives);
     for (const [index, input] of inputs.entries()) {
       for (const timeframe of TIMEFRAMES) {
         // Higher frames only change when a new decision bar closes; skip identical repeats.
@@ -85,23 +87,41 @@ export function collectCandidates(sources: ReplaySource[], start: number, end: n
   return candidates;
 }
 
-export interface ProfileReport { profile: string; fitSamples: number; validationSamples: number; auc: number | null; threshold: number; selected: number; selectedMeanR: number | null; selectedWinRate: number | null; selectedSumR: number; allMeanR: number; ruleSelected: number; ruleMeanR: number | null }
+export type Learner = "logistic" | "gbdt";
+export interface ProfileReport { profile: string; learner: Learner; fitSamples: number; validationSamples: number; auc: number | null; threshold: number; selected: number; selectedMeanR: number | null; selectedWinRate: number | null; selectedSumR: number; selectedLowR: number | null; allMeanR: number; ruleSelected: number; ruleMeanR: number | null }
+export const LEARNERS: Learner[] = ["logistic", "gbdt"];
 
 const mean = (values: number[]) => values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
 
-function evaluateProfile(fit: Candidate[], validation: Candidate[], profile: string) {
+/** Column means over observed values; they impute missing inputs for both learners. */
+export function columnMeans(rows: (number | null)[][]): number[] {
+  const k = rows[0]?.length ?? 0;
+  return Array.from({ length: k }, (_, j) => mean(rows.map(row => row[j]).filter((v): v is number => v !== null && Number.isFinite(v))) ?? 0);
+}
+
+interface Fitted { logistic: LogisticModel; boosted?: BoostedModel; means: number[]; predict: (row: (number | null)[]) => number }
+function fitLearner(rows: (number | null)[][], labels: number[], learner: Learner): Fitted {
+  const means = columnMeans(rows), filled = rows.map(row => impute(row, means));
+  const logistic = trainLogistic(filled, labels);
+  if (learner === "logistic") return { logistic, means, predict: row => predictProbability(logistic, impute(row, means)) };
+  const boosted = trainBoosted(filled, labels);
+  return { logistic, boosted, means, predict: row => boostedProbability(boosted, impute(row, means)) };
+}
+
+function evaluate(fit: Candidate[], validation: Candidate[], profile: string, learner: Learner) {
   const fitRows = fit.filter(c => c.outcomes[profile] != null), validRows = validation.filter(c => c.outcomes[profile] != null);
-  const report: ProfileReport = { profile, fitSamples: fitRows.length, validationSamples: validRows.length, auc: null, threshold: 0, selected: 0, selectedMeanR: null, selectedWinRate: null, selectedSumR: 0,
+  const report: ProfileReport = { profile, learner, fitSamples: fitRows.length, validationSamples: validRows.length, auc: null, threshold: 0, selected: 0, selectedMeanR: null, selectedWinRate: null, selectedSumR: 0, selectedLowR: null,
     allMeanR: mean(validRows.map(c => c.outcomes[profile]!)) ?? 0, ruleSelected: 0, ruleMeanR: null };
   const rules = validRows.filter(c => c.ruleBuy).map(c => c.outcomes[profile]!);
   report.ruleSelected = rules.length; report.ruleMeanR = mean(rules);
-  if (fitRows.length < 40 || validRows.length < 20) return { report, model: null, payoff: null, probabilities: [] as number[], validRows };
+  const empty = { report, fitted: null as Fitted | null, payoff: null as { avgWinR: number; avgLossR: number } | null, probabilities: [] as number[], validRows };
+  if (fitRows.length < 40 || validRows.length < 20) return empty;
   const labels = fitRows.map(c => c.outcomes[profile]! > 0 ? 1 : 0);
-  if (labels.every(v => v === labels[0])) return { report, model: null, payoff: null, probabilities: [] as number[], validRows };
-  const model = trainLogistic(fitRows.map(c => c.features), labels);
+  if (labels.every(v => v === labels[0])) return empty;
+  const fitted = fitLearner(fitRows.map(c => c.features), labels, learner);
   const wins = fitRows.map(c => c.outcomes[profile]!).filter(r => r > 0), losses = fitRows.map(c => c.outcomes[profile]!).filter(r => r <= 0);
   const payoff = { avgWinR: mean(wins) ?? 0, avgLossR: -(mean(losses) ?? 0) };
-  const probabilities = validRows.map(c => predictProbability(model, c.features));
+  const probabilities = validRows.map(c => fitted.predict(c.features));
   report.auc = auc(probabilities, validRows.map(c => c.outcomes[profile]! > 0 ? 1 : 0));
   let best = { threshold: 0, selected: [] as number[], sum: -Infinity };
   for (const threshold of EDGE_THRESHOLDS) {
@@ -109,12 +129,13 @@ function evaluateProfile(fit: Candidate[], validation: Candidate[], profile: str
     const sum = selected.reduce((s, v) => s + v, 0);
     if (selected.length >= 15 && sum > best.sum) best = { threshold, selected, sum };
   }
-  if (best.sum > -Infinity) Object.assign(report, { threshold: best.threshold, selected: best.selected.length, selectedMeanR: mean(best.selected), selectedWinRate: mean(best.selected.map(r => r > 0 ? 1 : 0)), selectedSumR: best.sum });
-  return { report, model, payoff, probabilities, validRows };
+  if (best.sum > -Infinity) Object.assign(report, { threshold: best.threshold, selected: best.selected.length, selectedMeanR: mean(best.selected),
+    selectedWinRate: mean(best.selected.map(r => r > 0 ? 1 : 0)), selectedSumR: best.sum, selectedLowR: bootstrapMean(best.selected)?.[0] ?? null });
+  return { report, fitted, payoff, probabilities, validRows };
 }
 
-/** Choose exit profile and edge threshold on a purged chronological holdout, then refit on all training rows. */
-export function fitHorizon(candidates: Candidate[], timeframe: Timeframe): { model: HorizonModel | null; profiles: ProfileReport[] } {
+/** Choose exit profile, learner and edge threshold on a purged chronological holdout, then refit on all training rows. */
+export function fitHorizon(candidates: Candidate[], timeframe: Timeframe, learners: Learner[] = LEARNERS): { model: HorizonModel | null; profiles: ProfileReport[] } {
   const rows = candidates.filter(c => c.timeframe === timeframe).sort((a, b) => a.publishedAt - b.publishedAt);
   if (rows.length < 80) return { model: null, profiles: [] };
   const cut = rows[Math.floor(rows.length * .7)].publishedAt;
@@ -122,25 +143,23 @@ export function fitHorizon(candidates: Candidate[], timeframe: Timeframe): { mod
   // Purge: a fit label may not overlap the holdout's first decision.
   const purge = (Date.parse(sample.expiresAt) - Date.parse(sample.asOf)) + (sample.holdingPeriodHours ?? 72) * HOUR + INTERVAL_MS[timeframe];
   const fit = rows.filter(c => c.publishedAt + purge <= cut), validation = rows.filter(c => c.publishedAt >= cut);
-  const evaluated = [...EXIT_PROFILES.map(p => p.id), LEGACY].map(profile => ({ profile, ...evaluateProfile(fit, validation, profile) }));
-  const managed = evaluated.filter(item => item.profile !== LEGACY && item.model && item.report.selected >= 15);
+  const evaluated = [...EXIT_PROFILES.map(p => p.id), LEGACY].flatMap(profile => learners.map(learner => ({ profile, learner, ...evaluate(fit, validation, profile, learner) })));
+  const managed = evaluated.filter(item => item.profile !== LEGACY && item.fitted && item.report.selected >= 15);
   const chosen = managed.sort((a, b) => b.report.selectedSumR - a.report.selectedSumR)[0];
-  // The selected trades' 90% bootstrap lower bound must be positive: this guards against picking a lucky
-  // profile/threshold out of the search grid.
-  const chosenSelected = chosen ? chosen.validRows.filter((_, i) => expectedR(chosen.payoff!, chosen.probabilities[i]) >= chosen.report.threshold).map(c => c.outcomes[chosen.profile]!) : [];
-  const lowerBound = bootstrapMean(chosenSelected)?.[0] ?? -Infinity;
-  const validated = !!chosen && (chosen.report.auc ?? 0) >= .55 && lowerBound > 0 && (chosen.report.selectedMeanR ?? 0) > chosen.report.allMeanR;
-  // Without a validated model, keep the exit profile that best served the rule-based fallback on training rows.
+  // The chosen selection's 90% bootstrap lower bound must be positive: a guard against a lucky pick from the search grid.
+  const validated = !!chosen && (chosen.report.auc ?? 0) >= .55 && (chosen.report.selectedLowR ?? -Infinity) > 0 && (chosen.report.selectedMeanR ?? 0) > chosen.report.allMeanR;
+  // Without a validated model, keep the exit profile that best served the rule-based candidates on training rows.
   const fallback = [...EXIT_PROFILES].map(p => ({ id: p.id, sum: rows.filter(c => c.ruleBuy && c.outcomes[p.id] != null).reduce((s, c) => s + c.outcomes[p.id]!, 0), n: rows.filter(c => c.ruleBuy && c.outcomes[p.id] != null).length }))
     .filter(item => item.n >= 10).sort((a, b) => b.sum - a.sum)[0];
   const profile = validated ? chosen.profile : fallback?.id ?? DEFAULT_EXIT_PROFILE.id;
+  const learner: Learner = validated ? chosen.learner : "logistic";
   const all = rows.filter(c => c.outcomes[profile] != null);
   const labels = all.map(c => c.outcomes[profile]! > 0 ? 1 : 0);
   const profiles = evaluated.map(item => item.report);
   if (all.length < 40 || labels.every(v => v === labels[0])) return { model: null, profiles };
-  const final = trainLogistic(all.map(c => c.features), labels);
+  const final = fitLearner(all.map(c => c.features), labels, learner);
   const wins = all.map(c => c.outcomes[profile]!).filter(r => r > 0), losses = all.map(c => c.outcomes[profile]!).filter(r => r <= 0);
-  const source = evaluated.find(item => item.profile === profile)!;
+  const source = evaluated.find(item => item.profile === profile && item.learner === learner)!;
   const validRows = source.validRows, probabilities = source.probabilities;
   const order = probabilities.map((p, i) => ({ p, y: validRows[i].outcomes[profile]! > 0 ? 1 : 0 })).sort((a, b) => a.p - b.p);
   const calibration = order.length >= 25 ? Array.from({ length: 5 }, (_, bin) => {
@@ -150,12 +169,11 @@ export function fitHorizon(candidates: Candidate[], timeframe: Timeframe): { mod
   const validation_: HorizonValidation = { start: new Date(cut).toISOString(), end: new Date(rows.at(-1)!.publishedAt).toISOString(), samples: validRows.length,
     baseWinRate: mean(validRows.map(c => c.outcomes[profile]! > 0 ? 1 : 0)) ?? 0, auc: source.report.auc,
     brier: order.length ? order.reduce((s, x) => s + (x.p - x.y) ** 2, 0) / order.length : 1, allMeanR: source.report.allMeanR, selected: source.report.selected,
-    selectedWinRate: source.report.selectedWinRate,
-    selectedMeanR: source.report.selectedMeanR, calibration };
-  const reason = validated ? `Holdout AUC ${source.report.auc?.toFixed(3)}; ${source.report.selected} selected trades averaged ${source.report.selectedMeanR?.toFixed(3)}R versus ${source.report.allMeanR.toFixed(3)}R for every candidate.`
+    selectedWinRate: source.report.selectedWinRate, selectedMeanR: source.report.selectedMeanR, calibration };
+  const reason = validated ? `${learner === "gbdt" ? "Gradient boosting" : "Logistic"} model · holdout AUC ${source.report.auc?.toFixed(3)}; ${source.report.selected} selected trades averaged ${source.report.selectedMeanR?.toFixed(3)}R (90% lower bound ${source.report.selectedLowR?.toFixed(3)}R) versus ${source.report.allMeanR.toFixed(3)}R for every candidate.`
     : `Holdout checks not met (AUC ≥0.55, ≥15 selected trades, positive 90% bootstrap lower bound on selected mean R, and better than the candidate average). This horizon stays research-only: no BUY plans.`;
-  return { profiles, model: { ...final, exitProfile: profile, minimumEdgeR: validated ? source.report.threshold : 0, avgWinR: mean(wins) ?? 0, avgLossR: -(mean(losses) ?? 0),
-    samples: all.length, wins: wins.length, validated, validation: validation_, reason } };
+  return { profiles, model: { ...final.logistic, means: final.means, learner, ...(final.boosted ? { boosted: final.boosted } : {}), exitProfile: profile, minimumEdgeR: validated ? source.report.threshold : 0,
+    avgWinR: mean(wins) ?? 0, avgLossR: -(mean(losses) ?? 0), samples: all.length, wins: wins.length, validated, validation: validation_, reason } };
 }
 
 export function buildModel(candidates: Candidate[], meta: { strategyVersion: string; generatedAt: string; trainedFrom: string; trainedThrough: string; universe: string[] }): { model: CalibrationModel; profiles: Record<string, ProfileReport[]> } {
@@ -166,9 +184,9 @@ export function buildModel(candidates: Candidate[], meta: { strategyVersion: str
     if (result.model) horizons[timeframe] = result.model;
   }
   return { profiles, model: { version: `cx-model-${meta.trainedThrough.slice(0, 10)}`, featureVersion: FEATURE_VERSION, ...meta, horizons, notes: [
-    `Logistic regression over ${FEATURE_KEYS.length} causal features, trained on long-entry candidates that pass every mandatory safety, trend, trigger and regime check.`,
+    `Logistic regression and gradient-boosted trees over ${FEATURE_KEYS.length} causal features (price, BTC context and lagged futures positioning), trained on long-entry candidates that pass every mandatory safety, trend, trigger and regime check.`,
     "Labels replay the production limit-entry, stop-first, scale-out, trailing-stop and time-exit engine with fees and slippage. Unfilled entries are excluded.",
-    "Exit profile and minimum edge are chosen on a purged chronological holdout (last 30% of training decisions); the deployed weights are refitted on all training rows.",
+    "Exit profile, learner and minimum edge are chosen on a purged chronological holdout (last 30% of training decisions); the deployed model is refitted on all training rows.",
     "Training ends before the scanner replay window, so the published replay is out-of-sample for this model. Probability is an estimate, not a guarantee.",
   ] } };
 }

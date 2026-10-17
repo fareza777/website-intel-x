@@ -1,9 +1,12 @@
 import type { EdgeEstimate, MarketFeatures, Timeframe } from "../types";
-import bundled from "./model.json";
+import { boostedProbability, type BoostedModel } from "./boosting";
+import { DERIVATIVE_KEYS } from "./derivative-keys";
+import type { RotationBacktest, RotationParams } from "./rotation";
 
-export const FEATURE_VERSION = 1;
+/** v2 adds futures positioning features and an explicit derivative-availability flag. */
+export const FEATURE_VERSION = 2;
 export const FEATURE_KEYS: (keyof MarketFeatures)[] = ["score", "trendAtr", "slopeAtr", "rsi", "adx", "atrPercentile", "squeeze", "distanceHighAtr", "volumeZ", "buyPressure",
-  "relativeStrength", "beta", "btcTrend", "breadth", "breakout", "reclaim", "pullback", "stopRisk", "swingStructure", "aboveVwap"];
+  "relativeStrength", "beta", "btcTrend", "breadth", "breakout", "reclaim", "pullback", "stopRisk", "swingStructure", "aboveVwap", ...DERIVATIVE_KEYS, "hasDerivatives"];
 
 export interface LogisticModel { weights: number[]; bias: number; means: number[]; scales: number[] }
 export interface HorizonValidation {
@@ -13,19 +16,34 @@ export interface HorizonValidation {
   calibration: { predicted: number; observed: number; count: number }[];
 }
 export interface HorizonModel extends LogisticModel {
+  /** Which learner produced the probability; logistic means/scales also impute missing inputs. */
+  learner?: "logistic" | "gbdt"; boosted?: BoostedModel;
   exitProfile: string; minimumEdgeR: number; avgWinR: number; avgLossR: number; samples: number; wins: number;
   validated: boolean; validation: HorizonValidation; reason: string;
+}
+/** Client-safe view of a model: everything except weights and trees. */
+export type HorizonSummaryView = Omit<HorizonModel, "weights" | "bias" | "means" | "scales" | "boosted">;
+export interface ModelSummary extends Omit<CalibrationModel, "horizons"> { horizons: Partial<Record<Timeframe, HorizonSummaryView>> }
+export function summarizeModel(model: CalibrationModel): ModelSummary {
+  return { ...model, horizons: Object.fromEntries(Object.entries(model.horizons).map(([frame, horizon]) => {
+    const { weights: _w, bias: _b, means: _m, scales: _s, boosted: _t, ...rest } = horizon;
+    void _w; void _b; void _m; void _s; void _t;
+    return [frame, rest];
+  })) };
 }
 export interface CalibrationModel {
   version: string; featureVersion: number; strategyVersion: string; generatedAt: string | null;
   trainedFrom: string | null; trainedThrough: string | null; universe: string[];
   horizons: Partial<Record<Timeframe, HorizonModel>>; notes: string[];
+  /** Momentum Rotation parameters chosen on the same training window, with that window's backtest. */
+  rotation?: { params: RotationParams; train: RotationBacktest; grid: Omit<RotationBacktest, "equity">[] };
 }
 
-export const BUNDLED_MODEL = bundled as CalibrationModel;
 
 export function sigmoid(value: number): number { return 1 / (1 + Math.exp(-Math.max(-35, Math.min(35, value)))); }
-export function vectorize(features: MarketFeatures): number[] { return FEATURE_KEYS.map(key => features[key]); }
+export function vectorize(features: MarketFeatures): (number | null)[] { return FEATURE_KEYS.map(key => features[key] ?? null); }
+/** Missing inputs take the training mean, which is neutral for both learners' standardized view. */
+export function impute(row: (number | null)[], means: number[]): number[] { return row.map((value, i) => value === null || !Number.isFinite(value) ? means[i] : value); }
 
 export function predictProbability(model: LogisticModel, row: number[]): number {
   let z = model.bias;
@@ -100,6 +118,7 @@ export function expectedR(model: Pick<HorizonModel, "avgWinR" | "avgLossR">, pro
 export function estimateEdge(model: CalibrationModel | null | undefined, timeframe: Timeframe, features: MarketFeatures): EdgeEstimate | null {
   const horizon = model?.horizons[timeframe];
   if (!model || !horizon || model.featureVersion !== FEATURE_VERSION || horizon.weights.length !== FEATURE_KEYS.length) return null;
-  const probability = predictProbability(horizon, vectorize(features));
+  const row = impute(vectorize(features), horizon.means);
+  const probability = horizon.learner === "gbdt" && horizon.boosted ? boostedProbability(horizon.boosted, row) : predictProbability(horizon, row);
   return { modelVersion: model.version, probability, expectedR: expectedR(horizon, probability), minimumEdgeR: horizon.minimumEdgeR, validated: horizon.validated, trainedThrough: model.trainedThrough ?? "" };
 }

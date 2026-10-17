@@ -1,5 +1,8 @@
 import type { Candle, MarketSetup, MarketSnapshot, Timeframe } from "../types";
 import { breadthOf, type MarketContext } from "./context";
+import { DEFAULT_ROTATION, rotationSignal, type RotationSignal } from "./rotation";
+import { BUNDLED_MODEL } from "./bundled-model";
+import { archiveFetcher, fetchDerivativeDays, requiredDays, type ArchiveFetcher, type DerivativeDay } from "./derivatives";
 import { get24hTickers, getCandles, getExchangeSymbols, getExchangeTime, MarketDataError, marketSource, publicError } from "./binance";
 import { DEFAULT_COSTS } from "./risk";
 import { analyzeSymbol, MIN_QUOTE_VOLUME } from "./setup";
@@ -21,11 +24,27 @@ const TOKENIZED_SECURITIES = new Set([
   "SOXLB", "SOXSB", "SPCXB", "SPYB", "TQQQB", "TSLAB", "TSMB", "USARB", "WDCB", "CRWDB", "MRNAB", "SQQQB", "STXB", "CRMB", "HIMSB", "BNCB", "JPMB", "LLYB", "SECZB", "USDEB",
 ]);
 
-export async function scanMarket(options: { symbols?: string[]; limit?: number } = {}): Promise<MarketSnapshot> {
+/** Futures archive download for the whole universe, bounded so a slow archive host never blocks research. */
+async function loadDerivatives(symbols: string[], now: number, fetcher: ArchiveFetcher): Promise<Record<string, DerivativeDay[]>> {
+  const [first, last] = requiredDays(now);
+  const result: Record<string, DerivativeDay[]> = {};
+  const deadline = Date.now() + 25_000;
+  let cursor = 0;
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (cursor < symbols.length && Date.now() < deadline) {
+      const symbol = symbols[cursor++];
+      try { result[symbol] = await fetchDerivativeDays(symbol, first, last, { fetcher, concurrency: 4 }); } catch { /* Missing positioning data stays null. */ }
+    }
+  }));
+  return result;
+}
+
+export async function scanMarket(options: { symbols?: string[]; limit?: number; derivatives?: ArchiveFetcher | null } = {}): Promise<MarketSnapshot> {
   const startedAt = Date.now();
   const errors: MarketSnapshot["errors"] = [];
   let universeSize = 0;
   let now = startedAt;
+  let rotation: RotationSignal | undefined;
   const frames: Timeframe[] = ["15m", "1h", "4h", "1d"];
   const timeframes: Record<Timeframe, MarketSetup[]> = { "15m": [], "1h": [], "4h": [], "1d": [] };
   const snapshot = (): MarketSnapshot => {
@@ -35,7 +54,7 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number }
     return { version: 1, generatedAt: new Date(now).toISOString(),
       dataAsOf: available.length ? (setups.length ? setups : available).map((setup) => setup.asOf).sort()[0] : null,
       status: !available.length ? "unavailable" : errors.length ? "partial" : "live", source: marketSource(), universeSize, scanned: setups.length,
-      errors, setups, timeframes, durationMs: Date.now() - startedAt, costs: { ...DEFAULT_COSTS } };
+      errors, setups, timeframes, durationMs: Date.now() - startedAt, costs: { ...DEFAULT_COSTS }, ...(rotation ? { rotation } : {}) };
   };
   try {
     const limit = options.limit ?? 30;
@@ -86,10 +105,16 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number }
       if (extra.every(result => result.status === "fulfilled")) btc = Object.fromEntries(extra.map((result, i) => [frames[i], (result as PromiseFulfilledResult<Candle[]>).value])) as Record<Timeframe, Candle[]>;
     }
     const closed = (candles: Candle[]) => candles.filter(candle => candle.closeTime < now);
+    const derivatives = options.derivatives === null ? undefined : await loadDerivatives(fetched.map(item => item.market.symbol), now, options.derivatives ?? archiveFetcher);
     const context: MarketContext = {
       btc: btc ? Object.fromEntries(frames.map(frame => [frame, closed(btc![frame])])) : undefined,
       breadth: Object.fromEntries(frames.map(frame => [frame, breadthOf(fetched.map(item => closed(item.candles[frame])))]).filter(([, value]) => value !== null)),
+      derivatives,
     };
+    // Momentum Rotation ranks the same universe from its closed daily candles.
+    const daily = Object.fromEntries(fetched.map(item => [item.market.symbol, closed(item.candles["1d"])]));
+    if (btc && !daily.BTCUSDT) daily.BTCUSDT = closed(btc["1d"]);
+    rotation = rotationSignal(daily, now, BUNDLED_MODEL.rotation?.params ?? DEFAULT_ROTATION);
     const results = fetched.map(({ market, candles, fetchErrors }) => {
       const analyzed: Partial<Record<Timeframe, MarketSetup>> = {};
       const failures: string[] = [...fetchErrors];

@@ -59,6 +59,9 @@ export interface MarketFeatures {
   score: number; trendAtr: number; slopeAtr: number; rsi: number; adx: number; atrPercentile: number; squeeze: number;
   distanceHighAtr: number; volumeZ: number; buyPressure: number; relativeStrength: number; beta: number; btcTrend: number; breadth: number;
   breakout: number; reclaim: number; pullback: number; stopRisk: number; swingStructure: number; aboveVwap: number;
+  /** Futures positioning from public archives; null when the market has no perpetual or data is missing. */
+  oiChange1d?: number | null; oiChange7d?: number | null; longShortRatio?: number | null; topTraderRatio?: number | null; takerRatio?: number | null; premium3d?: number | null;
+  hasDerivatives?: number;
 }
 /** Calibrated estimate from a frozen model trained only on data before its validation window. */
 export interface EdgeEstimate {
@@ -144,6 +147,8 @@ export interface MarketSnapshot {
   timeframes?: Record<ContextTimeframe, MarketSetup[]> & Partial<Record<"15m", MarketSetup[]>>;
   durationMs: number;
   costs: { feeBps: number; slippageBps: number };
+  /** Momentum Rotation portfolio from the same closed daily candles. */
+  rotation?: import("./market/rotation").RotationSignal;
 }
 export type SignalStatus = "PENDING" | "OPEN" | "TP1" | "TP2" | "TP3" | "STOPPED" | "EXPIRED" | "INVALIDATED" | "CLOSED";
 export interface SignalEvent {

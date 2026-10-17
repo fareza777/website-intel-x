@@ -17,6 +17,8 @@ export interface ScannerValidationReport {
   /** cx-spot-5: pooled per-horizon statistics and the frozen model's out-of-sample status. */
   summaries?: HorizonSummary[];
   model?: { version: string; trainedThrough: string | null; outOfSample: boolean };
+  /** Out-of-sample Momentum Rotation backtest over the replay window. */
+  rotation?: import("../market/rotation").RotationBacktest;
   failures: { symbol: string; message: string }[]; notes: string[];
 }
 export interface HorizonSummary {

@@ -8,7 +8,9 @@ import { entrySignal } from "./entry";
 import { exitProfile, QUALIFICATION_POLICIES, SIZING, STRATEGY_VERSION } from "./policy";
 import { summarizeContext, type MarketContext } from "./context";
 import { computeFeatures } from "./features";
-import { BUNDLED_MODEL, estimateEdge } from "./model";
+import { derivativeFeatures } from "./derivatives";
+import { estimateEdge } from "./model";
+import { BUNDLED_MODEL } from "./bundled-model";
 
 export { STRATEGY_VERSION } from "./policy";
 export const MIN_QUOTE_VOLUME = 5_000_000;
@@ -109,7 +111,8 @@ export function analyzeSymbol(input: SetupInput, timeframe: Timeframe = "1h", co
         : assessment.reason === "risk_too_low" ? `Required stop risk ${assessment.riskPct.toFixed(2)}% is below ${MIN_SETUP_RISK_PCT}%.`
           : "Exchange tick rounding cannot produce distinct, correctly ordered targets.";
   const features = computeFeatures({ timeframe, candles: baseCandles, indicators: base, score, entryModel, buyPressure: volume.buyPressure, aboveVwap,
-    stopRiskPct: assessment.riskPct, maximumStopRiskPct: policy.maximumStopRiskPct, btc: input.symbol === "BTCUSDT" ? baseCandles : market.btc, btcTrend: market.summary.btcTrend, breadth: market.summary.breadth });
+    stopRiskPct: assessment.riskPct, maximumStopRiskPct: policy.maximumStopRiskPct, btc: input.symbol === "BTCUSDT" ? baseCandles : market.btc, btcTrend: market.summary.btcTrend, breadth: market.summary.breadth,
+    derivatives: context?.derivatives ? derivativeFeatures(context.derivatives[input.symbol], latest.closeTime) : undefined });
   const edge = estimateEdge(model, timeframe, features);
   const calibrated = edge?.validated === true;
   const edgePassed = edge !== null && edge.expectedR >= edge.minimumEdgeR;

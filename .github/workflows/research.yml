@@ -8,7 +8,7 @@ on:
       train_days:
         description: 'Training span in days before the replay window (60–730)'
         required: false
-        default: '365'
+        default: '730'
       holdout_days:
         description: 'Out-of-sample replay window in days (30–180)'
         required: false
@@ -41,7 +41,7 @@ jobs:
     timeout-minutes: 120
     env:
       DATA_DIRECTORY: data
-      TRAIN_DAYS: ${{ inputs.train_days || '365' }}
+      TRAIN_DAYS: ${{ inputs.train_days || '730' }}
       HOLDOUT_DAYS: ${{ inputs.holdout_days || '90' }}
       BASELINE_REF: ${{ inputs.baseline_ref || 'main' }}
     steps:

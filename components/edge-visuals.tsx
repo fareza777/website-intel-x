@@ -2,7 +2,8 @@
 import { Activity, BrainCircuit, Gauge, ShieldAlert, ShieldCheck } from "lucide-react";
 import type { MarketSetup, Timeframe, TradePlan } from "@/lib/types";
 import type { HorizonSummary, ScannerValidationReport } from "@/lib/research/types";
-import { BUNDLED_MODEL, type CalibrationModel } from "@/lib/market/model";
+import type { ModelSummary } from "@/lib/market/model";
+import { MODEL_SUMMARY } from "@/lib/market/model-summary";
 import { cn, price } from "@/lib/utils";
 
 const signed = (value: number, digits = 2) => `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
@@ -127,8 +128,8 @@ function Heatmap({ report }: { report: ScannerValidationReport }) {
 }
 
 /** Holdout reliability of the bundled model: predicted versus observed win rate. */
-export function ModelCalibration({ model = BUNDLED_MODEL }: { model?: CalibrationModel }) {
-  const horizons = Object.entries(model.horizons) as [Timeframe, NonNullable<CalibrationModel["horizons"][Timeframe]>][];
+export function ModelCalibration({ model = MODEL_SUMMARY }: { model?: ModelSummary }) {
+  const horizons = Object.entries(model.horizons) as [Timeframe, NonNullable<ModelSummary["horizons"][Timeframe]>][];
   return <section className="panel model-panel">
     <div className="panel-heading"><div><h2>Calibrated edge model</h2><p>{model.version === "untrained" ? "No model has been trained yet; qualification uses rule scores." : `${model.version} · trained ${model.trainedFrom ? new Date(model.trainedFrom).toLocaleDateString("en-US") : "—"} – ${model.trainedThrough ? new Date(model.trainedThrough).toLocaleDateString("en-US") : "—"} on ${model.universe.length} markets`}</p></div><BrainCircuit size={22} /></div>
     {horizons.length > 0 && <div className="model-grid">{horizons.map(([frame, horizon]) => {

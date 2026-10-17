@@ -1,5 +1,11 @@
 import type { Candle, MarketSetup, MarketSnapshot, StoredState, Timeframe } from "../types";
 import { breadthOf, type MarketContext } from "../market/context";
+import type { DerivativeDay } from "../market/derivatives";
+
+export function derivativeMap(sources: ReplaySource[]): Record<string, DerivativeDay[]> | undefined {
+  const entries = sources.filter(source => source.derivatives).map(source => [source.symbol, source.derivatives!] as const);
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
 import type { CalibrationModel } from "../market/model";
 import { MarketDataError, validateCandles } from "../market/binance";
 import { analyzeSymbol, type SetupInput } from "../market/setup";
@@ -9,7 +15,7 @@ import type { ReplayTrade, ScannerValidationRow } from "./types";
 
 const FRAMES: Timeframe[] = ["15m", "1h", "4h", "1d"];
 const HOUR = 3_600_000;
-export interface ReplaySource { symbol: string; baseAsset: string; tickSize: number; stepSize: number; minNotional: number; candles: Record<Timeframe, Candle[]> }
+export interface ReplaySource { symbol: string; baseAsset: string; tickSize: number; stepSize: number; minNotional: number; candles: Record<Timeframe, Candle[]>; derivatives?: DerivativeDay[] }
 function closedEnd(candles: Candle[], now: number) {
   let lo = 0, hi = candles.length;
   while (lo < hi) { const mid = (lo + hi) >>> 1; if (candles[mid].closeTime < now) lo = mid + 1; else hi = mid; }
@@ -54,10 +60,10 @@ export interface ReplayOptions {
 }
 
 /** Cross-market context from the same closed inputs every symbol sees at this scan. */
-export function replayContext(inputs: SetupInput[], model: CalibrationModel | null | undefined): MarketContext {
+export function replayContext(inputs: SetupInput[], model: CalibrationModel | null | undefined, derivatives?: Record<string, DerivativeDay[]>): MarketContext {
   const btc = inputs.find(input => input.symbol === "BTCUSDT");
   const breadth = Object.fromEntries(FRAMES.map(frame => [frame, breadthOf(inputs.map(input => input.candles[frame] ?? []))]).filter(([, value]) => value !== null));
-  return { btc: btc?.candles, breadth, ...(model === undefined ? {} : { model }) };
+  return { btc: btc?.candles, breadth, ...(derivatives ? { derivatives } : {}), ...(model === undefined ? {} : { model }) };
 }
 
 /** Reuses the real publication, signal lifecycle and local paper accounting engines. */
@@ -83,6 +89,7 @@ export function replayUniverse(sources: ReplaySource[], start: number, end: numb
     actions: per(() => ({ BUY: 0, WAIT: 0, "NO TRADE": 0 })), publication: per(() => ({ buy: 0, wait: 0, unsized: 0 })),
     curves: per(() => [{ time: start - HOUR, value: capital }]), finals: per(() => ({ expired: 0, invalidated: 0 })) }));
   let scans = 0;
+  const derivatives = derivativeMap(sources);
   for (let now = start; now <= end; now += HOUR) {
     scans++;
     for (const ledger of ledgers) {
@@ -98,7 +105,7 @@ export function replayUniverse(sources: ReplaySource[], start: number, end: numb
       for (const frame of FRAMES) ledger.wallets[frame] = applyPaperUpdates(ledger.wallets[frame], ledger.state.signals.filter(signal => (signal.setup.timeframe ?? "1h") === frame && signal.setup.action === "BUY"));
     }
     const inputs = ledgers.map(ledger => historicalInput(ledger.source, now));
-    const context = replayContext(inputs, options.model);
+    const context = replayContext(inputs, options.model, derivatives);
     for (const [index, ledger] of ledgers.entries()) {
       const input = inputs[index];
       const setups = FRAMES.map(frame => analyzer(input, frame, context));

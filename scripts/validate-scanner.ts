@@ -4,8 +4,10 @@ import path from "node:path";
 import type { Candle, Timeframe } from "../lib/types";
 import { getExchangeSymbols, getExchangeTime, INTERVAL_MS } from "../lib/market/binance";
 import { history } from "../lib/research/history";
-import { BUNDLED_MODEL } from "../lib/market/model";
+import { fetchDerivativeDays, latestUsableDay } from "../lib/market/derivatives";
+import { BUNDLED_MODEL } from "../lib/market/bundled-model";
 import { summarizeHorizon } from "../lib/research/stats";
+import { backtestRotation, DEFAULT_ROTATION } from "../lib/market/rotation";
 import { DEFAULT_COSTS } from "../lib/market/risk";
 import { STRATEGY_VERSION } from "../lib/market/setup";
 import { replayUniverse, type ReplaySource } from "../lib/research/replay";
@@ -23,7 +25,7 @@ async function main() {
   const now = await getExchangeTime();
   let end = Math.floor(now / HOUR) * HOUR + 17 * 60_000; if (end > now) end -= HOUR;
   const start = end - days * DAY + HOUR;
-  const code = await Promise.all(["lib/market/setup.ts", "lib/market/entry.ts", "lib/market/policy.ts", "lib/market/indicators.ts", "lib/market/risk.ts", "lib/market/structure.ts", "lib/market/volume.ts", "lib/market/features.ts", "lib/market/context.ts", "lib/market/model.ts", "lib/market/model.json", "lib/tracking.ts", "lib/paper.ts", "lib/research/replay.ts"].map(file => readFile(file)));
+  const code = await Promise.all(["lib/market/setup.ts", "lib/market/entry.ts", "lib/market/policy.ts", "lib/market/indicators.ts", "lib/market/risk.ts", "lib/market/structure.ts", "lib/market/volume.ts", "lib/market/features.ts", "lib/market/context.ts", "lib/market/model.ts", "lib/market/model.json", "lib/market/boosting.ts", "lib/market/derivatives.ts", "lib/market/derivative-keys.ts", "lib/market/rotation.ts", "lib/tracking.ts", "lib/paper.ts", "lib/research/replay.ts"].map(file => readFile(file)));
   const hash = createHash("sha256"); for (const file of code) hash.update(file);
   const report: ScannerValidationReport = { version: 1, strategyVersion: STRATEGY_VERSION, codeHash: hash.digest("hex"), generatedAt: new Date(now).toISOString(), start: new Date(start).toISOString(), end: new Date(end).toISOString(),
     symbols: REPLAY_UNIVERSE,
@@ -46,11 +48,14 @@ async function main() {
       const candles = {} as Record<Timeframe, Candle[]>;
       // Sequential, paced requests avoid launching a historical-data burst.
       for (const frame of ["15m", "1h", "4h", "1d"] as Timeframe[]) candles[frame] = await history(symbol, frame, start - 270 * INTERVAL_MS[frame], end);
-      sources.push({ ...market, candles });
+      const derivatives = await fetchDerivativeDays(symbol, latestUsableDay(start) - 8 * DAY, latestUsableDay(end), { concurrency: 16 });
+      sources.push({ ...market, candles, derivatives });
     } catch (error) { report.failures.push({ symbol, message: error instanceof Error ? error.message : "Historical validation unavailable" }); console.error(`${symbol}: validation unavailable`); }
   }
   if (sources.length) {
     report.rows = replayUniverse(sources, start, end);
+    report.rotation = backtestRotation(Object.fromEntries(sources.map(source => [source.symbol, source.candles["1d"]])), start, end, BUNDLED_MODEL.rotation?.params ?? DEFAULT_ROTATION);
+    console.log(JSON.stringify({ rotation: { ...report.rotation, equity: undefined } }));
     report.summaries = (["15m", "1h", "4h", "1d"] as Timeframe[]).map(frame => summarizeHorizon(frame, report.rows.filter(row => row.timeframe === frame).flatMap(row => row.trades)));
     for (const row of report.rows) console.log(JSON.stringify({ symbol: row.symbol, timeframe: row.timeframe, publishedBuy: row.publishedBuy, completed: row.completed, winRate: row.winRate, profitFactor: row.profitFactor, netReturnPct: row.netReturnPct, maxDrawdownPct: row.maxDrawdownPct }));
     for (const summary of report.summaries) console.log(JSON.stringify({ ...summary, histogram: summary.histogram.map(bin => bin.count) }));

@@ -1,6 +1,9 @@
 import type { Candle, IndicatorSet, MarketFeatures, MarketSetup, Timeframe } from "../types";
 import { atr, ema } from "./indicators";
 import { confirmedPivots } from "./structure";
+import { DERIVATIVE_KEYS, type DerivativeFeatures } from "./derivative-keys";
+
+const emptyDerivatives = (): DerivativeFeatures => Object.fromEntries(DERIVATIVE_KEYS.map(key => [key, null])) as DerivativeFeatures;
 
 /** Wilder ADX; the first value needs 2×period bars. Returns null with less history. */
 export function adx(candles: Candle[], period = 14): number | null {
@@ -76,6 +79,7 @@ export interface FeatureInput {
   timeframe: Timeframe; candles: Candle[]; indicators: IndicatorSet; score: number; entryModel: MarketSetup["entryModel"];
   buyPressure: number; aboveVwap: boolean; stopRiskPct: number | null; maximumStopRiskPct: number;
   btc?: Candle[]; btcTrend: "bullish" | "neutral" | "bearish" | "unavailable"; breadth: number | null;
+  derivatives?: DerivativeFeatures;
 }
 
 /** Causal features from closed candles only. Every value is bounded so a bad bar cannot dominate the model. */
@@ -113,5 +117,7 @@ export function computeFeatures(input: FeatureInput): MarketFeatures {
     stopRisk: input.stopRiskPct === null ? 1 : clip(input.stopRiskPct / input.maximumStopRiskPct, 3),
     swingStructure: swing,
     aboveVwap: input.aboveVwap ? 1 : 0,
+    ...(input.derivatives ?? emptyDerivatives()),
+    hasDerivatives: input.derivatives && Object.values(input.derivatives).some(value => value !== null) ? 1 : 0,
   };
 }
