@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ElementType } from "react";
-import { Activity, ArrowDownUp, ArrowRight, ArrowUpRight, Bell, ChartCandlestick, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Crosshair, FlaskConical, Globe2, LayoutDashboard, ListFilter, Menu, Plus, Radio, RefreshCw, ScanLine, Search, Settings2, ShieldCheck, Star, Wallet, Waves, X } from "lucide-react";
+import { Activity, Orbit, ArrowDownUp, ArrowRight, ArrowUpRight, Bell, ChartCandlestick, Check, ChevronDown, ChevronRight, CircleHelp, Clock3, Crosshair, FlaskConical, Globe2, LayoutDashboard, ListFilter, Menu, Plus, Radio, RefreshCw, ScanLine, Search, Settings2, ShieldCheck, Star, Wallet, Waves, X } from "lucide-react";
 import type { AnalyticsReport, MarketSetup, MarketSnapshot, SignalEvent, SpotQuote, Timeframe, TrackedSignal } from "@/lib/types";
 import { cn, dollars, isStale, relativeTime } from "@/lib/utils";
 import { applyPaperUpdates, createPaperAccount, importPaperAccount, previewPosition, reservePosition, settlePaperPosition, type PaperAccount, type PaperPosition } from "@/lib/paper";
@@ -18,6 +18,8 @@ import { StrategyView } from "./strategy-view";
 import { PaperView } from "./paper-view";
 import { MarketEligibility } from "./market-eligibility";
 import { EdgeCell, HorizonDots, RegimeBanner } from "./edge-visuals";
+import { MarketPulse } from "./market-pulse";
+import { RotationView } from "./rotation-view";
 import { explainDecision } from "@/lib/research-explanation";
 import { compareOpportunities } from "@/lib/opportunities";
 import { AlertsView } from "./alerts-view";
@@ -36,6 +38,7 @@ const navigation: { id: View; label: string; icon: ElementType; group?: string }
   { id: "workspace", label: "Trade workspace", icon: ChartCandlestick },
   { id: "liquidity", label: "Liquidity radar", icon: Waves, group: "MARKET INTELLIGENCE" },
   { id: "volume", label: "Volume intelligence", icon: Activity },
+  { id: "rotation", label: "Momentum rotation", icon: Orbit },
   { id: "autopsy", label: "Signal autopsy", icon: Crosshair, group: "RESEARCH & PERFORMANCE" },
   { id: "strategy", label: "Strategy lab", icon: FlaskConical },
   { id: "paper", label: "Paper trading", icon: Wallet },
@@ -49,6 +52,7 @@ const titles: Record<View, { title: string; subtitle: string }> = {
   workspace: { title: "Trade workspace", subtitle: "A precise plan for every qualified opportunity." },
   liquidity: { title: "Liquidity radar", subtitle: "Look beneath the price. Understand the structure." },
   volume: { title: "Volume intelligence", subtitle: "See where participation meets price." },
+  rotation: { title: "Momentum rotation", subtitle: "Ride the strongest trends. Step aside when the market turns." },
   autopsy: { title: "Signal autopsy", subtitle: "Transparent recommendations. Accountable outcomes." },
   strategy: { title: "Strategy lab", subtitle: "Challenge the thesis before you trust the strategy." },
   paper: { title: "Paper trading", subtitle: "Build discipline with real data and virtual capital." },
@@ -297,7 +301,8 @@ export function Terminal() {
         {data && marketView && <div className="update-policy" aria-label="Market update status"><span className={selectedLivePrice === null ? "unavailable" : ""}><i />{selectedLivePrice === null ? "Live quote unavailable" : "Live prices · every 30s"}</span><span>Closed candles · every minute</span><span>Recommendations · every {SCAN_INTERVAL_HOURS}h</span></div>}
         {(loadError || stale || data?.snapshot.status === "partial") && <div className="status-banner"><Activity size={19} /><span>{loadError || (stale ? "Market data is stale or unavailable. Trade simulation is disabled until fresh data arrives." : `${data?.snapshot.errors.length} ${data?.snapshot.errors.length === 1 ? "market" : "markets"} could not be analyzed. Only verified data is displayed.`)}</span><button onClick={() => void loadPublished(true)}>Refresh</button></div>}
         {data && marketView && <div className="horizon-bar"><div><span>RESEARCH HORIZON</span><div className="segment">{(["15m", "1h", "4h", "1d"] as Timeframe[]).map(tf => <button key={tf} className={timeframe === tf ? "active" : ""} aria-label={`${tf.toUpperCase()} research horizon`} onClick={() => setTimeframe(tf)}>{tf.toUpperCase()}</button>)}</div></div><p>Independent scores, entry levels, targets, and expiry for each horizon.</p></div>}
-        {data && horizonAvailable && ["overview", "radar", "workspace"].includes(view) && <RegimeBanner setups={setups} timeframe={timeframe} />}
+        {data && horizonAvailable && view === "overview" && <MarketPulse setups={setups} snapshot={data.snapshot} timeframe={timeframe} onRotation={() => navigate("rotation")} />}
+        {data && horizonAvailable && ["radar", "workspace"].includes(view) && <RegimeBanner setups={setups} timeframe={timeframe} />}
         {data && horizonAvailable && ["overview", "radar", "workspace"].includes(view) && <MarketEligibility setups={setups} timeframe={timeframe} onFilter={action => { setActionFilter(action); setSearch(""); setMinScore(0); setOnlyWatchlist(false); navigate("radar"); }} />}
         {view === "guide" ? <GuideView topic={guideTopic} onTopic={setGuideTopic} onNavigate={navigate} /> : !data ? <div className="terminal-loading"><div className="loading-radar"><ScanLine size={37} /></div><h2>Connecting the dots.</h2><p>Loading real market prices and closed-candle analysis.</p><span>EMA · RSI · MACD · ATR · market structure</span>{loadError && <Button variant="outline" onClick={() => void loadPublished(true)}>Retry connection</Button>}</div> : !horizonAvailable && marketView ? <section className="panel"><div className="empty-state large"><Clock3 size={35} /><h2>{timeframe.toUpperCase()} research is not available yet</h2><p>Run a new market scan to calculate this horizon from its own closed candles.</p><Button onClick={scan} disabled={busy}>Calculate research</Button></div></section> : <>
           {(view === "overview" || view === "radar") && <>
@@ -310,6 +315,7 @@ export function Terminal() {
           {view === "liquidity" && <LiquidityView setups={setups} onSelect={selectAsset} />}
           {view === "volume" && selected && <><div className="view-asset-picker"><label>Analyzing<select value={selected.symbol} onChange={e => setSymbol(e.target.value)}>{setups.map(s => <option key={s.id} value={s.symbol}>{s.baseAsset} / USDT</option>)}</select></label></div><VolumeView setup={selected} key={selected.symbol} /></>}
           {view === "autopsy" && <HistoryView signals={data.signals} />}
+          {view === "rotation" && <RotationView signal={data.snapshot.rotation} outOfSample={data.scannerValidation?.rotation ?? null} />}
           {view === "strategy" && <StrategyView report={data.analytics} validation={data.scannerValidation ?? null} />}
           {view === "paper" && <PaperView key={paper.initialCapital} account={paper} quotes={quotes} update={() => void updatePaper()} busy={paperBusy || !!paperAction} importAccount={importPortfolio} onManage={managePaper} onExplore={() => navigate("radar")} onCapital={setStartingCapital} onJournal={(index, value) => setPaper(current => ({ ...current, positions: current.positions.map((p, i) => i === index ? { ...p, journal: value } : p) }))} />}
           {view === "alerts" && <AlertsView alerts={data.alerts} seen={seen} onRead={readAlerts} onEnable={enableNotifications} enabled={notifications} />}
