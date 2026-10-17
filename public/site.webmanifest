@@ -1,0 +1,16 @@
+{
+  "name": "CryptoScanora — Crypto Market Scanner & Research Terminal",
+  "short_name": "CryptoScanora",
+  "description": "Real-data crypto market intelligence for disciplined spot research and paper trading.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070a12",
+  "theme_color": "#070a12",
+  "lang": "en",
+  "icons": [{
+    "src": "/icon.svg",
+    "sizes": "any",
+    "type": "image/svg+xml",
+    "purpose": "any maskable"
+  }]
+}
