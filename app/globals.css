@@ -1598,13 +1598,8 @@ body::after { content: ""; position: fixed; inset: -20%; z-index: -1; pointer-ev
 @keyframes appear { to { opacity: 1; } }
 @keyframes beacon { 50% { transform: scale(1.8); opacity: .5; } }
 
-/* BUY cards: rotating conic border */
-@property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
-.opportunity-card:has(.action-badge.buy) { border-color: transparent; background:
-  linear-gradient(var(--panel), var(--panel)) padding-box,
-  conic-gradient(from var(--spin), rgba(45, 212, 191, .9), rgba(56, 189, 248, .2) 25%, rgba(129, 140, 248, .9) 50%, rgba(45, 212, 191, .2) 75%, rgba(45, 212, 191, .9)) border-box;
-  border: 1px solid transparent; animation: spin 6s linear infinite; box-shadow: 0 0 40px -18px rgba(45, 212, 191, .8); }
-@keyframes spin { to { --spin: 360deg; } }
+/* BUY cards: calm static highlight, no motion */
+.opportunity-card:has(.action-badge.buy) { border-color: rgba(45, 212, 191, .45); box-shadow: 0 0 0 1px rgba(45, 212, 191, .15), 0 18px 40px -24px rgba(45, 212, 191, .7); }
 
 /* Movers + activity row */
 .motion-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; margin: 0 0 28px; }
@@ -1645,7 +1640,7 @@ body::after { content: ""; position: fixed; inset: -20%; z-index: -1; pointer-ev
 @media (max-width: 800px) { .ticker-tape { top: 0; position: relative; } }
 @media (max-width: 580px) { .movers-grid { grid-template-columns: minmax(0, 1fr); } .tape-label { padding: 0 10px; } .tape-item { padding: 0 14px; } }
 @media (prefers-reduced-motion: reduce) {
-  body::after, .tape-track, .feed-track, .opportunity-card:has(.action-badge.buy), .market-pulse::after, .live-pill i, .blue-dot, .tape-dot.buy, .tape-label svg { animation: none !important; }
+  body::after, .tape-track, .feed-track, .market-pulse::after, .live-pill i, .blue-dot, .tape-dot.buy, .tape-label svg { animation: none !important; }
   .tape-viewport { overflow-x: auto; } .feed-viewport { overflow-y: auto; }
   .sparkline .spark-line { stroke-dashoffset: 0; animation: none; } .sparkline .spark-end { opacity: 1; animation: none; }
   .mover, .mover-bar i { animation: none; opacity: 1; }
