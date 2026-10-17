@@ -146,7 +146,7 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
     const move = (event: MouseEventParams) => {
       const time = typeof event.time === "number" ? event.time * 1000 : NaN;
       if (!byTime.has(time) || !event.point || event.point.x < 0 || event.point.y < 0) { setCursor(null); return; }
-      setCursor({ time, x: Math.max(8, Math.min(event.point.x + 18, (container.current?.clientWidth ?? 600) - 260)) });
+      setCursor({ time, x: Math.max(8, Math.min(event.point.x + 12, (container.current?.clientWidth ?? 600) - 184)) });
     };
     chart.subscribeCrosshairMove(move); chart.subscribeClick(move);
     crosshairRef.current = candle => chart.setCrosshairPosition(candle.close, candle.time / 1000 as UTCTimestamp, series);
@@ -195,7 +195,7 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
     <div className="chart-canvas-wrapper" style={{ height }}>
       <div className="chart-canvas advanced-canvas" ref={container} data-testid="advanced-chart-canvas" />
       {!loading && !!candles.length && <ChartRuler key={rulerKey} chartRef={chartRef} seriesRef={rulerSeriesRef} times={candleTimes} intervalMs={intervalMs[timeframe]} enabled={measuring} revision={rulerRevision} onEscape={clearRuler} />}
-      {!measuring && cursor && metrics && <div className="candle-hover-tooltip" role="status" style={{ left: cursor.x }}><span>{new Date(selected.time).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · {timeframe.toUpperCase()}</span><strong className={metrics.bodyPct < 0 ? "negative" : "positive"}>{percent(metrics.bodyPct)}<small>open → close</small></strong><div><span>Range <b>{metrics.rangePct.toFixed(2)}%</b></span><span>Volume <b>{price(selected.volume, true)}</b></span></div></div>}
+      {!measuring && cursor && metrics && <div className="candle-hover-tooltip" role="status" aria-label="Candle open-to-close change" style={{ left: cursor.x }}><span>{new Date(selected.time).toLocaleString("en-US", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · {timeframe.toUpperCase()}</span><strong className={metrics.bodyPct < 0 ? "negative" : "positive"}>{percent(metrics.bodyPct)}</strong></div>}
       {(loading || (error && !candles.length)) && <div className="chart-state">{loading ? <><LoaderCircle className="spin" size={28} /><p>Loading Binance candles…</p></> : <><Activity size={28} /><p>{error}</p><Button variant="outline" onClick={() => { setLoading(true); setError(""); setRetry(v => v + 1); }}><RefreshCw />Retry</Button></>}</div>}
     </div>
     <div className="chart-navigation-bar"><div className="chart-ranges">{[50, 100, 200, "all"].map(count => <button key={count} onClick={() => range(count as number | "all")}>{count === "all" ? "All" : `${count} bars`}</button>)}</div><div className="chart-zoom"><button aria-label="Zoom out chart" onClick={() => zoom(1.3)}><Minus size={18} /></button><button aria-label="Zoom in chart" onClick={() => zoom(.75)}><Plus size={18} /></button><button aria-label="Reset chart view" onClick={() => range(90)}><RotateCcw size={17} /></button></div></div>
