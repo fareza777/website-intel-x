@@ -50,7 +50,7 @@ class BinanceClient:
         if path not in {"/api/v3/time", "/api/v3/klines"}:
             raise MarketDataError("Only public server-time and kline endpoints are permitted")
         url = BASE_URL + path + ("?" + urlencode(params) if params else "")
-        request = Request(url, headers={"User-Agent": "CryptoIntel-X/1.0 (public-research)",
+        request = Request(url, headers={"User-Agent": "CryptoScanora/1.0 (public-research)",
                                         "Accept": "application/json"})
         for attempt in range(3):
             try:

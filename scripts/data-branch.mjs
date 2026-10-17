@@ -122,7 +122,7 @@ export async function publishData(options = {}) {
   }
   const temporary = await mkdtemp(path.join(os.tmpdir(), "crypto-market-index-"));
   try {
-    const env = { ...process.env, GIT_INDEX_FILE: path.join(temporary, "index"), GIT_AUTHOR_NAME: "CryptoIntel market publisher", GIT_AUTHOR_EMAIL: "market-publisher@users.noreply.github.com", GIT_COMMITTER_NAME: "CryptoIntel market publisher", GIT_COMMITTER_EMAIL: "market-publisher@users.noreply.github.com" };
+    const env = { ...process.env, GIT_INDEX_FILE: path.join(temporary, "index"), GIT_AUTHOR_NAME: "CryptoScanora market publisher", GIT_AUTHOR_EMAIL: "market-publisher@users.noreply.github.com", GIT_COMMITTER_NAME: "CryptoIntel market publisher", GIT_COMMITTER_EMAIL: "market-publisher@users.noreply.github.com" };
     git(cwd, tip ? ["read-tree", tip] : ["read-tree", "--empty"], { env });
     for (const name of files) {
       const blob = git(cwd, ["hash-object", "-w", "--stdin"], { env, input: await readFile(path.join(directory, ...name.split("/"))) }).trim();

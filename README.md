@@ -1,4 +1,4 @@
-# CryptoIntel X
+# CryptoScanora
 
 Advanced crypto trading intelligence built with Next.js, TypeScript, Python and real Binance spot data. The terminal publishes deterministic research plans and tracks simulated outcomes without placing real orders.
 

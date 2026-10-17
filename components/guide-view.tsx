@@ -15,7 +15,7 @@ export function GuideView({ topic, onTopic, onNavigate }: { topic: GuideTopic; o
       <nav aria-label="Guide topics">{matches.map((a, i) => <button className={a.id === topic ? "active" : ""} onClick={() => { onTopic(a.id); setQuery(""); }} key={a.id}><span>{String(i + 1).padStart(2, "0")}</span>{a.title}<ChevronRight size={17} /></button>)}{!matches.length && <p className="guide-no-results">No matching topics. Try another term or open the glossary.</p>}</nav>
       <button className="guide-glossary-link" onClick={() => onTopic("glossary")}>Open glossary<ArrowUpRight size={17} /></button>
     </aside>
-    <article className="guide-article panel"><header><span className="eyebrow">CRYPTOINTEL X / GUIDE</span><h2>{article.title}</h2><p>{article.subtitle}</p>{article.page && <Button variant="outline" onClick={() => onNavigate(article.page!)}>Open page<ArrowUpRight size={17} /></Button>}</header>
+    <article className="guide-article panel"><header><span className="eyebrow">CRYPTOSCANORA / GUIDE</span><h2>{article.title}</h2><p>{article.subtitle}</p>{article.page && <Button variant="outline" onClick={() => onNavigate(article.page!)}>Open page<ArrowUpRight size={17} /></Button>}</header>
       <section><h3>Purpose</h3><p>{article.purpose}</p></section>
       {!!article.metrics.length && <section><h3>Key metrics & terms</h3><dl className="guide-definitions">{article.metrics.map(([title, detail]) => <div key={title}><dt>{title}</dt><dd>{detail}</dd></div>)}</dl></section>}
       {!!article.steps.length && <section><h3>How to use it</h3><ol className="guide-steps">{article.steps.map(step => <li key={step}>{step}</li>)}</ol></section>}

@@ -15,6 +15,7 @@ function savedPortfolio(raw: unknown): SavedPortfolio {
 function openDatabase(): Promise<IDBDatabase> {
   if (typeof indexedDB === "undefined") return Promise.reject(new Error("IndexedDB unavailable"));
   if (!database) database = new Promise((resolve, reject) => {
+    // Database name predates the CryptoScanora rename; keep it so saved portfolios remain readable.
     const request = indexedDB.open("cryptointel-local", 1);
     request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains("portfolio")) request.result.createObjectStore("portfolio"); };
     request.onsuccess = () => resolve(request.result);
