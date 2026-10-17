@@ -1,0 +1,27 @@
+name: Probe derivative data
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/workflows/probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          for u in \
+            "https://fapi.binance.com/fapi/v1/time" \
+            "https://fapi.binance.com/futures/data/openInterestHist?symbol=BTCUSDT&period=1h&limit=2" \
+            "https://data.binance.vision/data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2026-10-15.zip" \
+            "https://data.binance.vision/data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2026-10-16.zip" \
+            "https://data.binance.vision/data/futures/um/daily/premiumIndexKlines/BTCUSDT/1h/BTCUSDT-1h-2026-10-15.zip" \
+            "https://data.binance.vision/data/futures/um/daily/premiumIndexKlines/BTCUSDT/1h/BTCUSDT-1h-2026-10-16.zip" \
+            "https://data.binance.vision/data/futures/um/monthly/fundingRate/BTCUSDT/BTCUSDT-fundingRate-2026-09.zip" \
+            "https://data.binance.vision/data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2024-10-15.zip"; do
+            echo "== $u"; curl -sS -o /tmp/f -D - -m 20 "$u" | grep -iE "^HTTP|last-modified|content-length" ; head -c 200 /tmp/f | head -3; echo
+          done
+          curl -sS -m 20 -o m.zip "https://data.binance.vision/data/futures/um/daily/metrics/BTCUSDT/BTCUSDT-metrics-2026-10-15.zip" && unzip -p m.zip | head -4
+          curl -sS -m 20 -o p.zip "https://data.binance.vision/data/futures/um/daily/premiumIndexKlines/BTCUSDT/1h/BTCUSDT-1h-2026-10-15.zip" && unzip -p p.zip | head -3
+          curl -sS -m 20 "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision?delimiter=/&prefix=data/futures/um/daily/" | grep -o "<Prefix>[^<]*</Prefix>"
