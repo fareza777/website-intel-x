@@ -25,7 +25,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     permissions:
       contents: write
     env:
@@ -74,12 +74,12 @@ jobs:
         run: python -m analytics.run --symbol BTCUSDT --limit 1000 --output data/analytics.json
         timeout-minutes: 3
       - name: Replay production scanner on real history
-        # Same production rules, account ledger and real data; no model or optimization.
+        # Same production rules, frozen model and account ledger on real data; no optimization in this step.
         # The replay refresh is daily, so it does not multiply hourly scan work.
         if: steps.analytics.outputs.due == 'true'
         continue-on-error: true
         run: npx tsx scripts/validate-scanner.ts --days 90
-        timeout-minutes: 5
+        timeout-minutes: 15
       - name: Scan and advance immutable originals
         id: scan
         continue-on-error: true

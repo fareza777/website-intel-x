@@ -1,4 +1,5 @@
 import type { Candle, MarketSnapshot, SignalEvent, StoredState, TrackedSignal } from "./types";
+import { roundToStep } from "./market/risk";
 export function emptyState(): StoredState { return { version: 1, updatedAt: "", snapshot: null, signals: [], alerts: [], analytics: null }; }
 export const activeStatuses = new Set(["PENDING", "OPEN", "TP1", "TP2"]);
 const marketKey = (setup: TrackedSignal["setup"]) => `${setup.symbol}:${setup.timeframe ?? "1h"}`;
@@ -54,19 +55,33 @@ export function advanceSignal(original: TrackedSignal, candles: Candle[], now: n
   function event(type: string, at: number, price: number | null, detail: string) {
     signal.events = uniqueEvents([...signal.events, { id: `${signal.setup.id}:${type}`, signalId: signal.setup.id, type, at: new Date(at).toISOString(), price, detail }]);
   }
+  const management = plan.management;
   function exit(price: number, at: number, stopped: boolean) {
-    signal.exitFill = price * (1 - slip);
+    const fill = price * (1 - slip);
+    const partial = signal.partial;
+    // A scaled position reports one quantity-weighted exit so cash = quantity × exitFill × (1 − fee).
+    signal.exitFill = partial ? partial.fraction * partial.fill + (1 - partial.fraction) * fill : fill;
     signal.exitAt = new Date(at).toISOString();
-    signal.status = stopped ? "STOPPED" : signal.highestTarget === 3 ? "TP3" : "CLOSED";
+    signal.status = signal.highestTarget === 3 ? "TP3" : stopped && !partial ? "STOPPED" : "CLOSED";
     signal.realizedReturnPct = ((signal.exitFill * (1 - fee)) / (signal.entryFill! * (1 + fee)) - 1) * 100;
-    event(stopped ? "STOPPED" : "EXIT", at, signal.exitFill, stopped ? "Conservative stop-first fill; gap opens and exit costs included." : "Full position exited; both-side fees and slippage included.");
+    const type = !stopped ? "EXIT" : partial ? "TRAIL EXIT" : "STOPPED";
+    event(type, at, fill, !stopped ? `${partial ? "Remaining" : "Full"} position exited; both-side fees and slippage included.`
+      : partial ? "Remaining position left at its protective breakeven/trailing stop after the TP1 scale-out." : "Conservative stop-first fill; gap opens and exit costs included.");
   }
+  function scaleOut(at: number) {
+    if (!management || signal.partial) return;
+    signal.partial = { fraction: management.partialFraction, fill: plan!.targets[0].price * (1 - slip), at: new Date(at).toISOString() };
+    signal.activeStop = Math.max(plan!.stopLoss, management.breakevenStop);
+    event("SCALE OUT", at, signal.partial.fill, `Sold ${management.partialFraction * 100}% at TP1; the remaining stop moves to breakeven ${management.breakevenStop}.`);
+  }
+  const stopLevel = () => signal.partial ? Math.max(plan.stopLoss, signal.activeStop ?? plan.stopLoss) : plan.stopLoss;
   function markTargets(price: number, at: number) {
     for (let i = signal.highestTarget; i < plan!.targets.length; i++) {
       if (price < plan!.targets[i].price) break;
       signal.highestTarget = i + 1;
       signal.status = `TP${i + 1}` as TrackedSignal["status"];
-      event(`TP${i + 1}`, at, plan!.targets[i].price, `Target ${i + 1} touched. Full position stays open until TP3, stop, or the ${holdingHours}-hour time exit.`);
+      event(`TP${i + 1}`, at, plan!.targets[i].price, management ? `Target ${i + 1} touched.` : `Target ${i + 1} touched. Full position stays open until TP3, stop, or the ${holdingHours}-hour time exit.`);
+      if (i === 0) scaleOut(at);
     }
   }
   const sorted = [...candles].sort((a, b) => a.time - b.time);
@@ -94,6 +109,27 @@ export function advanceSignal(original: TrackedSignal, candles: Candle[], now: n
         event("ENTRY", openTime, signal.entryFill, `Simulated limit entry; ${executionInterval(signal)} OHLC time, not a verified tick execution.`);
         if (candle.low <= plan.stopLoss) exit(plan.stopLoss, candle.closeTime, true);
         // A target may precede the entry within this bar; never award it.
+      }
+    } else if (management) {
+      const stop = stopLevel();
+      if (candle.open <= stop) exit(candle.open, openTime, true);
+      else {
+        markTargets(candle.open, openTime);
+        if (signal.highestTarget === 3) exit(plan.targets[2].price, openTime, false);
+        else if (candle.low <= stopLevel()) exit(stopLevel(), candle.closeTime, true);
+        else {
+          const before = !!signal.partial;
+          markTargets(candle.high, candle.closeTime);
+          if (signal.highestTarget === 3) exit(plan.targets[2].price, candle.closeTime, false);
+          // Stop-first ambiguity: a same-bar TP1 then a dip to breakeven exits the remainder.
+          else if (!before && signal.partial && candle.low <= stopLevel()) exit(stopLevel(), candle.closeTime, true);
+          else if (candle.closeTime + 1 - Date.parse(signal.enteredAt) >= holdingHours * 3_600_000) exit(candle.close, candle.closeTime, false);
+        }
+      }
+      if (activeStatuses.has(signal.status)) {
+        // The trail uses only completed bars and applies from the next bar onward.
+        signal.peak = Math.max(signal.peak ?? plan.entry, candle.high);
+        if (signal.partial) signal.activeStop = Math.max(signal.activeStop ?? plan.stopLoss, management.breakevenStop, roundToStep(signal.peak - management.trailMultiple * management.atr, plan.tickSize));
       }
     } else {
       if (candle.open <= plan.stopLoss) exit(candle.open, openTime, true);

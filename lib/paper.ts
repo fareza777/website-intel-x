@@ -2,6 +2,7 @@ import { z } from "zod";
 import { activeStatuses, hasCompleteSignalHistory } from "./tracking";
 import { eventSchema, setupSchema } from "./validation";
 import { roundToStep } from "./market/risk";
+import { MAX_PORTFOLIO_HEAT_PCT } from "./market/policy";
 import type { MarketSetup, TrackedSignal } from "./types";
 export interface PaperPosition { signal: TrackedSignal; quantity: number; reserved: number; entryCost: number | null; settled: boolean; journal: string }
 export interface PaperAccount { version: 1; initialCapital: number; cash: number; positions: PaperPosition[] }
@@ -11,7 +12,8 @@ export function createPaperAccount(capital = 10_000): PaperAccount {
   return { version: 1, initialCapital: capital, cash: capital, positions: [] };
 }
 const finiteMoney = z.number().finite().min(0).max(1e12);
-const signalSchema = z.object({ setup: setupSchema.refine(s => s.plan !== null), status: z.enum(["PENDING", "OPEN", "TP1", "TP2", "TP3", "STOPPED", "EXPIRED", "INVALIDATED", "CLOSED"]), events: z.array(eventSchema).max(100), publishedAt: z.iso.datetime(), enteredAt: z.iso.datetime().nullable(), entryFill: finiteMoney.positive().nullable(), exitAt: z.iso.datetime().nullable(), exitFill: finiteMoney.positive().nullable(), lastEvaluatedTime: z.number().finite().nonnegative(), highestTarget: z.number().int().min(0).max(3), realizedReturnPct: z.number().finite().nullable() }).refine(s => {
+const signalSchema = z.object({ setup: setupSchema.refine(s => s.plan !== null), status: z.enum(["PENDING", "OPEN", "TP1", "TP2", "TP3", "STOPPED", "EXPIRED", "INVALIDATED", "CLOSED"]), events: z.array(eventSchema).max(100), publishedAt: z.iso.datetime(), enteredAt: z.iso.datetime().nullable(), entryFill: finiteMoney.positive().nullable(), exitAt: z.iso.datetime().nullable(), exitFill: finiteMoney.positive().nullable(), lastEvaluatedTime: z.number().finite().nonnegative(), highestTarget: z.number().int().min(0).max(3), realizedReturnPct: z.number().finite().nullable(),
+  partial: z.object({ fraction: z.number().finite().positive().max(1), fill: finiteMoney.positive(), at: z.iso.datetime() }).nullable().optional(), peak: finiteMoney.nullable().optional(), activeStop: finiteMoney.nullable().optional() }).refine(s => {
   const entered = s.enteredAt !== null && s.entryFill !== null;
   const exited = s.exitAt !== null && s.exitFill !== null && s.realizedReturnPct !== null;
   if (entered && Date.parse(s.enteredAt!) < Date.parse(s.publishedAt)) return false;
@@ -57,16 +59,36 @@ export function previewPosition(account: PaperAccount, setup: MarketSetup, riskP
   if (account.positions.some(p => !p.settled && p.signal.setup.symbol === setup.symbol && (p.signal.setup.timeframe ?? "1h") === (setup.timeframe ?? "1h"))) throw new Error("A simulation for this asset and horizon is already active.");
   if (account.positions.filter(p => !p.settled).length >= 10) throw new Error("Maximum 10 active spot simulations per virtual portfolio.");
   if (!Number.isFinite(riskPercent) || riskPercent < .1 || riskPercent > 5) throw new Error("Risk must be between 0.1% and 5%.");
+  // Volatility, beta and horizon guidance reduce, never increase, the chosen account-risk budget.
+  const budget = account.initialCapital * riskPercent * (setup.sizing?.riskMultiplier ?? 1) / 100;
+  const heat = openRisk(account);
+  if (heat + budget > account.initialCapital * MAX_PORTFOLIO_HEAT_PCT / 100 + 1e-8) throw new Error(`Portfolio heat limit: active simulations already risk ${(heat / account.initialCapital * 100).toFixed(2)}% of initial capital (maximum ${MAX_PORTFOLIO_HEAT_PCT}%).`);
   const fee = plan.feeBps / 10_000, slip = plan.slippageBps / 10_000;
   const entryCost = plan.entry * (1 + slip) * (1 + fee);
   const perUnitLoss = entryCost - plan.stopLoss * (1 - slip) * (1 - fee);
   if (perUnitLoss <= 0) throw new Error("Invalid stop distance.");
-  const raw = Math.min(account.cash / entryCost, account.initialCapital * riskPercent / 100 / perUnitLoss);
+  const raw = Math.min(account.cash / entryCost, budget / perUnitLoss);
   let quantity = roundToStep(raw, plan.stepSize);
-  if (quantity * entryCost > account.cash || quantity * perUnitLoss > account.initialCapital * riskPercent / 100) quantity = roundToStep(quantity - plan.stepSize, plan.stepSize);
+  if (quantity * entryCost > account.cash || quantity * perUnitLoss > budget) quantity = roundToStep(quantity - plan.stepSize, plan.stepSize);
   const reserved = quantity * entryCost;
   if (![quantity, reserved].every(Number.isFinite) || quantity <= 0 || quantity * plan.entry < plan.minNotional || reserved > account.cash + 1e-8) throw new Error("Available cash is below the exchange minimum order size.");
   return { quantity, reserved, maxLoss: quantity * perUnitLoss };
+}
+/** Planned loss still at stake across active simulations. A protected remainder risks nothing below breakeven. */
+export function openRisk(account: PaperAccount): number {
+  return account.positions.filter(p => !p.settled).reduce((sum, p) => {
+    if (p.signal.partial) return sum;
+    const plan = p.signal.setup.plan!;
+    const entry = (p.signal.entryFill ?? plan.entry * (1 + plan.slippageBps / 10_000)) * (1 + plan.feeBps / 10_000);
+    return sum + p.quantity * Math.max(0, entry - plan.stopLoss * (1 - plan.slippageBps / 10_000) * (1 - plan.feeBps / 10_000));
+  }, 0);
+}
+/** Liquidation value of an open position, including the already-sold TP1 portion. */
+export function positionValue(position: PaperPosition, mark: number): number {
+  const plan = position.signal.setup.plan!, partial = position.signal.partial;
+  const remaining = mark * (1 - plan.slippageBps / 10_000);
+  const blended = partial ? partial.fraction * partial.fill + (1 - partial.fraction) * remaining : remaining;
+  return position.quantity * blended * (1 - plan.feeBps / 10_000);
 }
 export function reservePosition(account: PaperAccount, setup: MarketSetup, riskPercent: number, at = new Date().toISOString()): PaperAccount {
   const { quantity, reserved } = previewPosition(account, setup, riskPercent, at);
@@ -120,7 +142,8 @@ export function settlePaperPosition(account: PaperAccount, signalId: string, pub
     const age = Date.parse(at) - Date.parse(quote.asOf);
     if (!Number.isFinite(age) || age < -10_000 || age > 120_000 || quote.symbol !== signal.setup.symbol || !Number.isFinite(quote.price) || quote.price <= 0) throw new Error("A fresh Binance quote is required for a manual virtual exit.");
     if (signal.entryFill === null || signal.enteredAt === null) throw new Error("The virtual entry has not filled yet. Cancel the pending plan instead.");
-    signal.exitFill = quote.price * (1 - plan.slippageBps / 10_000);
+    const fill = quote.price * (1 - plan.slippageBps / 10_000);
+    signal.exitFill = signal.partial ? signal.partial.fraction * signal.partial.fill + (1 - signal.partial.fraction) * fill : fill;
     signal.exitAt = at;
     signal.status = "CLOSED";
     signal.realizedReturnPct = (signal.exitFill * (1 - plan.feeBps / 10_000) / (signal.entryFill * (1 + plan.feeBps / 10_000)) - 1) * 100;

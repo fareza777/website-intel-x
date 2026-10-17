@@ -77,7 +77,8 @@ describe("exact scanner replay", () => {
     const data = source(), stop = start + 2 * hour;
     Object.assign(data.candles["1h"].find(c => c.time === Date.UTC(2026, 9, 16, 13))!, { open: 101, high: 104, low: 99, close: 103 });
     const plan = makeTradePlan({ price: 100, atr: 1, tickSize: .01, stepSize: .001, minNotional: 5 })!;
-    const rows = replaySymbol(data, start, stop, { analyzer: (input, tf) => ({ ...analyzeSymbol(input, tf), id: `${tf}-${input.now}`,
+    // Equal sizing isolates the marking rule from volatility-based size guidance.
+    const rows = replaySymbol(data, start, stop, { analyzer: (input, tf) => ({ ...analyzeSymbol(input, tf), sizing: undefined, id: `${tf}-${input.now}`,
       action: tf !== "15m" && input.now === start ? "BUY" : "NO TRADE", plan: tf !== "15m" && input.now === start ? plan : null,
     }) });
     const hourly = rows.find(row => row.timeframe === "1h")!;

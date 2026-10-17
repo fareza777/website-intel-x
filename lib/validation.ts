@@ -12,13 +12,22 @@ export const planSchema = z.object({
   targets: z.array(z.object({ price: positive, rr: positive, gainPct: positive })).length(3),
   riskPct: positive.max(100), feeBps: nonnegative.max(1000), slippageBps: nonnegative.max(1000),
   tickSize: positive, stepSize: positive, minNotional: nonnegative,
-}).refine(p => p.stopLoss < p.entryZone[0] && p.entryZone[0] <= p.entry && p.entry <= p.entryZone[1] && p.targets[0].price > p.entry && p.targets[1].price > p.targets[0].price && p.targets[2].price > p.targets[1].price, "Invalid long research price ordering");
+  management: z.object({ kind: z.literal("scale-trail"), partialFraction: positive.max(1), breakevenStop: positive, atr: positive, trailMultiple: positive.max(20), profile: z.string().max(40) }).optional(),
+}).refine(p => p.stopLoss < p.entryZone[0] && p.entryZone[0] <= p.entry && p.entry <= p.entryZone[1] && p.targets[0].price > p.entry && p.targets[1].price > p.targets[0].price && p.targets[2].price > p.targets[1].price && (!p.management || p.management.breakevenStop < p.targets[0].price), "Invalid long research price ordering");
+const featureKeys = ["score", "trendAtr", "slopeAtr", "rsi", "adx", "atrPercentile", "squeeze", "distanceHighAtr", "volumeZ", "buyPressure", "relativeStrength", "beta", "btcTrend", "breadth", "breakout", "reclaim", "pullback", "stopRisk", "swingStructure", "aboveVwap"] as const;
+const finite = z.number().finite();
+const featuresSchema = z.object(Object.fromEntries(featureKeys.map(key => [key, finite])) as Record<(typeof featureKeys)[number], typeof finite>);
 const indicators = z.object({ ema21: positive, ema50: positive, ema200: positive, rsi: nonnegative.max(100), macd: z.number().finite(), macdSignal: z.number().finite(), macdHistogram: z.number().finite(), atr: nonnegative, trend: z.enum(["bullish", "bearish", "neutral"]) });
 export const setupSchema = z.object({
   strategyVersion: z.string().min(1).max(80).optional(),
   entryModel: z.enum(["BREAKOUT", "STRUCTURE_RECLAIM", "PULLBACK"]).optional(),
   policy: z.object({ maximumAtrPct: positive.max(50), maximumStopRiskPct: positive.max(50), minimumBuyScore: nonnegative.max(100) }).optional(),
   riskReview: z.object({ entry: positive, stopLoss: positive, costedLossPct: nonnegative.max(100), maximumLossPct: positive.max(100), feeBps: nonnegative.max(1000), slippageBps: nonnegative.max(1000) }).optional(),
+  features: featuresSchema.optional(),
+  edge: z.object({ modelVersion: z.string().max(80), probability: nonnegative.max(1), expectedR: finite, minimumEdgeR: finite, validated: z.boolean(), trainedThrough: z.string().max(40) }).nullable().optional(),
+  market: z.object({ btcTrend: z.enum(["bullish", "neutral", "bearish", "unavailable"]), breadth: nonnegative.max(1).nullable(), riskOff: z.boolean(), detail: shortText }).optional(),
+  sizing: z.object({ riskMultiplier: positive.max(1), reasons: z.array(shortText).max(10) }).optional(),
+  experimental: z.boolean().optional(),
   qualification: z.array(z.object({ id: z.string().max(80), label: z.string().max(150), requiredFor: z.enum(["plan", "buy", "context"]), passed: z.boolean(), detail: shortText })).max(30).optional(),
   tickSize: positive.optional(),
   timeframe: z.enum(["15m", "1h", "4h", "1d"]).optional(), holdingPeriodHours: z.number().int().min(1).max(720).optional(),

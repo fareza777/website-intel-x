@@ -39,7 +39,44 @@ export interface TradePlan {
   tickSize: number;
   stepSize: number;
   minNotional: number;
+  /** Frozen exit management. Absent on legacy plans, which keep the full-position TP3 exit. */
+  management?: TradeManagement;
 }
+/** Scale out at TP1, protect the remainder at breakeven, then trail by a fixed ATR multiple. */
+export interface TradeManagement {
+  kind: "scale-trail";
+  /** Fraction of the position sold at TP1. */
+  partialFraction: number;
+  /** Lowest stop price whose costed exit does not lose money on the remainder. */
+  breakevenStop: number;
+  /** Decision-bar ATR frozen at publication; the trail never recalculates from later data. */
+  atr: number;
+  trailMultiple: number;
+  /** Exit configuration identifier chosen on training data before the replay window. */
+  profile: string;
+}
+export interface MarketFeatures {
+  score: number; trendAtr: number; slopeAtr: number; rsi: number; adx: number; atrPercentile: number; squeeze: number;
+  distanceHighAtr: number; volumeZ: number; buyPressure: number; relativeStrength: number; beta: number; btcTrend: number; breadth: number;
+  breakout: number; reclaim: number; pullback: number; stopRisk: number; swingStructure: number; aboveVwap: number;
+}
+/** Calibrated estimate from a frozen model trained only on data before its validation window. */
+export interface EdgeEstimate {
+  modelVersion: string;
+  probability: number;
+  expectedR: number;
+  minimumEdgeR: number;
+  /** False means the model failed out-of-sample checks and only informs, never qualifies. */
+  validated: boolean;
+  trainedThrough: string;
+}
+export interface MarketContextSummary {
+  btcTrend: "bullish" | "neutral" | "bearish" | "unavailable";
+  breadth: number | null;
+  riskOff: boolean;
+  detail: string;
+}
+export interface PositionSizing { riskMultiplier: number; reasons: string[] }
 export interface VolumeIntelligence {
   vwap: number; poc: number; relativeVolume: number; buyPressure: number;
   profile: { price: number; volume: number }[];
@@ -49,6 +86,12 @@ export interface MarketSetup {
   strategyVersion?: string;
   entryModel?: "BREAKOUT" | "STRUCTURE_RECLAIM" | "PULLBACK";
   policy?: { maximumAtrPct: number; maximumStopRiskPct: number; minimumBuyScore: number };
+  /** cx-spot-5 additions: model inputs, calibrated edge, market regime and sizing guidance. */
+  features?: MarketFeatures;
+  edge?: EdgeEstimate | null;
+  market?: MarketContextSummary;
+  sizing?: PositionSizing;
+  experimental?: boolean;
   /** Diagnostic candidate levels, also retained when the trade plan is rejected. */
   riskReview?: { entry: number; stopLoss: number; costedLossPct: number; maximumLossPct: number; feeBps: number; slippageBps: number };
   /** Observed rule checks, frozen with the research; older originals may omit them. */
@@ -118,6 +161,10 @@ export interface TrackedSignal {
   highestTarget: number;
   realizedReturnPct: number | null;
   events: SignalEvent[];
+  /** Managed plans only: the TP1 scale-out fill after slippage, and the protective stop state. */
+  partial?: { fraction: number; fill: number; at: string } | null;
+  peak?: number | null;
+  activeStop?: number | null;
 }
 export interface StoredState {
   version: 1;

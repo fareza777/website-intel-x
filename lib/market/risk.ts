@@ -1,4 +1,5 @@
 import type { MarketSetup, TradePlan } from "../types";
+import type { ExitProfile } from "./policy";
 
 export const DEFAULT_COSTS = { feeBps: 10, slippageBps: 5 } as const;
 
@@ -31,7 +32,7 @@ export function positionSize(plan: TradePlan, capital: number, riskPercent: numb
   return { quantity, notional: quantity * plan.entry, riskAmount, maxLoss: quantity * unitLoss };
 }
 
-export interface TradePlanInput { price: number; atr: number; support?: number; tickSize: number; stepSize: number; minNotional: number; feeBps?: number; slippageBps?: number; maxRiskPct?: number }
+export interface TradePlanInput { price: number; atr: number; support?: number; tickSize: number; stepSize: number; minNotional: number; feeBps?: number; slippageBps?: number; maxRiskPct?: number; exit?: ExitProfile }
 export interface TradePlanAssessment { plan: TradePlan | null; reason: "invalid_inputs" | "invalid_levels" | "risk_too_high" | "risk_too_low" | "invalid_targets" | null; riskPct: number | null; review?: MarketSetup["riskReview"] }
 export const MIN_SETUP_RISK_PCT = .25;
 export const MAX_SETUP_RISK_PCT = 8;
@@ -56,12 +57,29 @@ export function assessTradePlan(input: TradePlanInput): TradePlanAssessment {
   const review = { entry, stopLoss, costedLossPct: riskPct, maximumLossPct: maxRiskPct, feeBps, slippageBps };
   if (riskPct > maxRiskPct) return { plan: null, reason: "risk_too_high", riskPct, review };
   if (riskPct < MIN_SETUP_RISK_PCT) return { plan: null, reason: "risk_too_low", riskPct, review };
-  const targets = [2, 3, 4].map((multiple) => {
+  const base: TradePlan = { entry, entryZone, stopLoss, targets: [], riskPct, feeBps, slippageBps, tickSize, stepSize, minNotional };
+  const plan = withExitProfile(base, input.exit, atr);
+  if (!plan) return { plan: null, reason: "invalid_targets", riskPct, review };
+  return { plan, reason: null, riskPct, review };
+}
+
+/** Rebuild targets and exit management for fixed entry/stop levels; legacy plans use 2R/3R/4R without management. */
+export function withExitProfile(plan: TradePlan, exit: ExitProfile | undefined, atr: number): TradePlan | null {
+  const { entry, stopLoss, tickSize, feeBps, slippageBps } = plan;
+  const { debit, credit } = costFactors(feeBps, slippageBps);
+  const unitDebit = entry * debit, unitLoss = unitDebit - stopLoss * credit;
+  const multiples = exit ? [exit.partialR, (exit.partialR + exit.finalR) / 2, exit.finalR] : [2, 3, 4];
+  const targets = multiples.map((multiple) => {
     const target = roundToStep((unitDebit + multiple * unitLoss) / credit, tickSize, "up");
     return { price: target, rr: (target * credit - unitDebit) / unitLoss, gainPct: (target * credit - unitDebit) / unitDebit * 100 };
   });
-  if (targets[0].price <= entry || targets.some((target, index) => index > 0 && target.price <= targets[index - 1].price)) return { plan: null, reason: "invalid_targets", riskPct, review };
-  return { plan: { entry, entryZone, stopLoss, targets, riskPct, feeBps, slippageBps, tickSize, stepSize, minNotional }, reason: null, riskPct, review };
+  if (targets[0].price <= entry || targets.some((target, index) => index > 0 && target.price <= targets[index - 1].price)) return null;
+  // Breakeven covers both-side fees and slippage on the remaining quantity.
+  const management = exit ? { kind: "scale-trail" as const, partialFraction: exit.partialFraction, breakevenStop: roundToStep(unitDebit / credit, tickSize, "up"), atr, trailMultiple: exit.trailMultiple, profile: exit.id } : undefined;
+  if (management && management.breakevenStop >= targets[0].price) return null;
+  const { management: _previous, ...rest } = plan;
+  void _previous;
+  return { ...rest, targets, ...(management ? { management } : {}) };
 }
 
 export function makeTradePlan(input: TradePlanInput): TradePlan | null { return assessTradePlan(input).plan; }

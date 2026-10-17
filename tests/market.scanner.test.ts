@@ -96,7 +96,7 @@ describe("scanner universe and data status", () => {
     expect(first.status).toBe("live");
     expect(first.universeSize).toBe(30);
     expect(first.setups.map((setup) => setup.symbol)).toEqual(bases.slice(0, 30).map((base) => `${base}USDT`));
-    expect(requests.filter((url) => url.pathname.endsWith("/klines"))).toHaveLength(120);
+    expect(requests.filter((url) => url.pathname.endsWith("/klines"))).toHaveLength(124); // 30 markets × 4 frames + BTC market context
     expect(first.timeframes?.["1h"]).toEqual(first.setups);
     expect(first.timeframes?.["4h"]).toHaveLength(30);
     expect(first.timeframes?.["1d"]).toHaveLength(30);

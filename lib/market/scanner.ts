@@ -1,4 +1,5 @@
-import type { MarketSetup, MarketSnapshot, Timeframe } from "../types";
+import type { Candle, MarketSetup, MarketSnapshot, Timeframe } from "../types";
+import { breadthOf, type MarketContext } from "./context";
 import { get24hTickers, getCandles, getExchangeSymbols, getExchangeTime, MarketDataError, marketSource, publicError } from "./binance";
 import { DEFAULT_COSTS } from "./risk";
 import { analyzeSymbol, MIN_QUOTE_VOLUME } from "./setup";
@@ -64,32 +65,46 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number }
       }).sort((a, b) => b.quoteVolume24h - a.quoteVolume24h || a.symbol.localeCompare(b.symbol)).slice(0, limit);
     universeSize = requested ? Math.min(requested.length, options.limit ?? 50) : universe.length;
     if (!requested && universe.length < 20) throw new MarketDataError("Fewer than 20 liquid, eligible USDT spot markets are available; automatic scan withheld");
-    const results = await Promise.all(universe.map(async (market) => {
-      const analyzed: Partial<Record<Timeframe, MarketSetup>> = {};
+    type Fetched = { market: (typeof universe)[number]; candles: Record<Timeframe, Candle[]>; fetchErrors: string[] };
+    const fetched = (await Promise.all(universe.map(async (market): Promise<Fetched | null> => {
       try {
         const candleResults = await Promise.allSettled(frames.map(frame => getCandles(market.symbol, frame)));
         const fetchErrors = candleResults.flatMap((result, index) =>
           result.status === "rejected" ? [`${frames[index].toUpperCase()} data: ${publicError(result.reason)}`] : []);
         // A missing 15M feed does not suppress valid hourly and longer research.
         if (candleResults.slice(1).some(result => result.status === "rejected")) throw new MarketDataError(fetchErrors.join("; "));
-        const candles = Object.fromEntries(candleResults.map((result, i) => [frames[i], result.status === "fulfilled" ? result.value : []])) as Record<Timeframe, import("../types").Candle[]>;
-        const failures: string[] = [...fetchErrors];
-        for (const timeframe of frames) {
-          if (!candles[timeframe].length) continue;
-          try {
-            const setup = analyzeSymbol({ ...market, now, candles }, timeframe);
-            const stale = setup.reasons.find((reason) => reason.startsWith("Rejected stale"));
-            if (stale) throw new MarketDataError(stale, "stale");
-            analyzed[timeframe] = setup;
-          } catch (error) { failures.push(`${timeframe.toUpperCase()}: ${publicError(error)}`); }
-        }
-        if (failures.length) errors.push({ symbol: market.symbol, message: failures.join("; ") });
-        return analyzed;
+        return { market, fetchErrors, candles: Object.fromEntries(candleResults.map((result, i) => [frames[i], result.status === "fulfilled" ? result.value : []])) as Record<Timeframe, Candle[]> };
       } catch (error) {
         errors.push({ symbol: market.symbol, message: publicError(error) });
-        return analyzed;
+        return null;
       }
-    }));
+    }))).filter((item): item is Fetched => item !== null);
+    // BTC defines market tone for every symbol, including watchlists that omit it.
+    let btc = fetched.find(item => item.market.symbol === "BTCUSDT")?.candles;
+    if (!btc) {
+      const extra = await Promise.allSettled(frames.map(frame => getCandles("BTCUSDT", frame)));
+      if (extra.every(result => result.status === "fulfilled")) btc = Object.fromEntries(extra.map((result, i) => [frames[i], (result as PromiseFulfilledResult<Candle[]>).value])) as Record<Timeframe, Candle[]>;
+    }
+    const closed = (candles: Candle[]) => candles.filter(candle => candle.closeTime < now);
+    const context: MarketContext = {
+      btc: btc ? Object.fromEntries(frames.map(frame => [frame, closed(btc![frame])])) : undefined,
+      breadth: Object.fromEntries(frames.map(frame => [frame, breadthOf(fetched.map(item => closed(item.candles[frame])))]).filter(([, value]) => value !== null)),
+    };
+    const results = fetched.map(({ market, candles, fetchErrors }) => {
+      const analyzed: Partial<Record<Timeframe, MarketSetup>> = {};
+      const failures: string[] = [...fetchErrors];
+      for (const timeframe of frames) {
+        if (!candles[timeframe].length) continue;
+        try {
+          const setup = analyzeSymbol({ ...market, now, candles }, timeframe, context);
+          const stale = setup.reasons.find((reason) => reason.startsWith("Rejected stale"));
+          if (stale) throw new MarketDataError(stale, "stale");
+          analyzed[timeframe] = setup;
+        } catch (error) { failures.push(`${timeframe.toUpperCase()}: ${publicError(error)}`); }
+      }
+      if (failures.length) errors.push({ symbol: market.symbol, message: failures.join("; ") });
+      return analyzed;
+    });
     errors.sort((a, b) => a.symbol.localeCompare(b.symbol));
     for (const result of results) for (const timeframe of frames) {
       const setup = result[timeframe];

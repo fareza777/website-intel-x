@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { ArrowDownToLine, ArrowRight, ArrowUpFromLine, BookOpen, Clock3, RefreshCw, ShieldCheck, Wallet, X } from "lucide-react";
-import type { PaperAccount, PaperPosition } from "@/lib/paper";
+import { positionValue, type PaperAccount, type PaperPosition } from "@/lib/paper";
 import type { SpotQuote } from "@/lib/types";
 import { dollars, money, percent, price, relativeTime } from "@/lib/utils";
 import { downloadJson } from "@/lib/download";
@@ -18,8 +18,7 @@ function currentMark(position: PaperPosition, quote?: SpotQuote) {
   if (!quote) return null;
   const age = Date.now() - Date.parse(quote.asOf);
   if (quote.symbol !== position.signal.setup.symbol || !Number.isFinite(quote.price) || quote.price <= 0 || !Number.isFinite(age) || age > 120_000 || age < -10_000) return null;
-  const plan = position.signal.setup.plan!;
-  return position.quantity * quote.price * (1 - plan.feeBps / 10_000) * (1 - plan.slippageBps / 10_000);
+  return positionValue(position, quote.price);
 }
 export function PaperView({ account, quotes, update, busy, importAccount, onJournal, onManage, onExplore, onCapital }: Props) {
   const input = useRef<HTMLInputElement>(null);
