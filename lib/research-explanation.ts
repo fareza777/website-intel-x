@@ -28,7 +28,7 @@ const labels: Record<string, [string, string]> = {
   score: ["Sufficient technical agreement", "The score measures rule alignment. BUY still requires all safety and confirmation checks."],
   regime: ["Market is not risk-off", "New long plans pause when BTC's higher-timeframe trend is bearish and fewer than 30% of scanned markets close above their EMA50."],
   edge: ["Positive calibrated edge", "A model trained only on earlier data estimates the win probability and expected R after costs. It qualifies entries only after passing an out-of-sample holdout."],
-  calibration: ["Validated 15M model", "15M is the noisiest horizon and lost money under the previous rules, so it publishes BUY plans only with a validated model."],
+  calibration: ["Validated model for this horizon", "No edge, no trade: a horizon whose trained model failed its out-of-sample holdout (and 15M without any model) stays research-only and publishes no BUY plans."],
 };
 function decisionFrames(timeframe: Timeframe): Timeframe[] { return timeframe === "15m" ? ["15m", "1h", "4h"] : timeframe === "1h" ? ["1h", "4h", "1d"] : timeframe === "4h" ? ["4h", "1d"] : ["1d"]; }
 export function explainCheck(check: QualificationCheck, setup: MarketSetup) {

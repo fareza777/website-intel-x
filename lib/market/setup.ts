@@ -139,7 +139,10 @@ export function analyzeSymbol(input: SetupInput, timeframe: Timeframe = "1h", co
     { id: "regime", label: "Market regime not risk-off", requiredFor: "buy", passed: !market.summary.riskOff, detail: market.summary.detail },
     ...(edge ? [{ id: "edge", label: "Positive calibrated edge", requiredFor: calibrated ? "buy" as const : "context" as const, passed: edgePassed, detail: edgeDetail }] : []),
     { id: "score", label: "Technical score floor", requiredFor: calibrated ? "context" : "buy", passed: score >= policy.minimumBuyScore, detail: `${score}/100 versus minimum ${policy.minimumBuyScore}; ${calibrated ? "the calibrated edge replaces this floor while its model is validated." : "score cannot override safety or a missing price trigger."}` },
-    ...(experimental && !calibrated ? [{ id: "calibration", label: "Validated 15M model", requiredFor: "buy" as const, passed: false, detail: "15M lost money in the cx-spot-4 replay. New 15M BUY plans require a model that passed its chronological holdout; until then 15M stays research-only." }] : []),
+    // No edge, no trade: once a horizon has a trained model, only a validated one may publish BUY.
+    ...(!calibrated && (experimental || horizonModel) ? [{ id: "calibration", label: `Validated ${label} model`, requiredFor: "buy" as const, passed: false,
+      detail: horizonModel ? `The ${label} model did not pass its out-of-sample holdout (training candidates averaged ${horizonModel.validation.allMeanR >= 0 ? "+" : ""}${horizonModel.validation.allMeanR.toFixed(2)}R; holdout AUC ${horizonModel.validation.auc?.toFixed(2) ?? "—"}). ${label} stays research-only until a retrained model validates.`
+        : "15M lost money in the cx-spot-4 replay. New 15M BUY plans require a model that passed its chronological holdout; until then 15M stays research-only." }] : []),
   ];
   const rejected = qualification.some(check => check.requiredFor === "plan" && !check.passed);
   const ready = !rejected && qualification.every(check => check.requiredFor === "context" || check.passed);

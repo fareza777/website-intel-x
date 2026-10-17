@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Candle, MarketSetup, MarketSnapshot, Timeframe } from "../lib/types";
-import { analyzeSymbol } from "../lib/market/setup";
+import { analyzeSymbol as analyzeWithModel } from "../lib/market/setup";
+// These tests exercise the rule path; the bundled calibration model is tested separately.
+const analyzeSymbol = (input: Parameters<typeof analyzeWithModel>[0], timeframe?: Parameters<typeof analyzeWithModel>[1], context: Parameters<typeof analyzeWithModel>[2] = { model: null }) => analyzeWithModel(input, timeframe, context);
 import { advanceSignal, emptyState, hasCompleteSignalHistory, publishSignals } from "../lib/tracking";
 import { makeTradePlan } from "../lib/market/risk";
 

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Candle, ContextTimeframe } from "../lib/types";
 import { INTERVAL_MS } from "../lib/market/binance";
-import { analyzeSymbol, type SetupInput } from "../lib/market/setup";
+import { analyzeSymbol as analyzeWithModel, type SetupInput } from "../lib/market/setup";
+// These tests exercise the rule path; the bundled calibration model is tested separately.
+const analyzeSymbol = (input: Parameters<typeof analyzeWithModel>[0], timeframe?: Parameters<typeof analyzeWithModel>[1], context: Parameters<typeof analyzeWithModel>[2] = { model: null }) => analyzeWithModel(input, timeframe, context);
 
 const now = Date.UTC(2026, 9, 15, 12, 1);
 const horizons: ContextTimeframe[] = ["1h", "4h", "1d"];

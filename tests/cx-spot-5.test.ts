@@ -5,7 +5,7 @@ import { analyzeSymbol, type SetupInput } from "../lib/market/setup";
 import { makeTradePlan, withExitProfile } from "../lib/market/risk";
 import { DEFAULT_EXIT_PROFILE, EXIT_PROFILES, MAX_PORTFOLIO_HEAT_PCT } from "../lib/market/policy";
 import { adx, percentileRank, volumeZ } from "../lib/market/features";
-import { auc, FEATURE_KEYS, FEATURE_VERSION, predictProbability, trainLogistic, type CalibrationModel, type HorizonModel } from "../lib/market/model";
+import { auc, BUNDLED_MODEL, FEATURE_KEYS, FEATURE_VERSION, predictProbability, trainLogistic, type CalibrationModel, type HorizonModel } from "../lib/market/model";
 import { advanceSignal } from "../lib/tracking";
 import { applyPaperUpdates, createPaperAccount, importPaperAccount, openRisk, positionValue, previewPosition, reservePosition, settlePaperPosition } from "../lib/paper";
 import { bootstrapMean, monteCarloDrawdown, summarizeHorizon } from "../lib/research/stats";
@@ -156,10 +156,11 @@ describe("cx-spot-5 qualification", () => {
     expect(negative.action).toBe("WAIT");
     expect(negative.qualification!.find(check => check.id === "edge")!.passed).toBe(false);
   });
-  it("shows an unvalidated model only as context", () => {
-    const setup = analyzeSymbol(qualifiedInput(), "1h", { model: model(-3, false) });
-    expect(setup.action).toBe("BUY");
+  it("keeps a horizon research-only while its trained model is not validated", () => {
+    const setup = analyzeSymbol(qualifiedInput(), "1h", { model: model(3, false) });
+    expect(setup.action).toBe("WAIT");
     expect(setup.qualification!.find(check => check.id === "edge")!.requiredFor).toBe("context");
+    expect(setup.qualification!.find(check => check.id === "calibration")!.passed).toBe(false);
   });
 });
 
@@ -191,6 +192,17 @@ describe("cx-spot-5 features, model and statistics", () => {
     expect(summary.validated).toBe(false);
     expect(summary.exitReasons).toEqual({ stopped: 17, trail: 33, target: 0, time: 0 });
     expect(summary.histogram.reduce((s, bin) => s + bin.count, 0)).toBe(50);
+  });
+});
+
+describe("cx-spot-5 bundled model", () => {
+  it("matches the feature contract and ends before its replay window", () => {
+    expect(BUNDLED_MODEL.featureVersion).toBe(FEATURE_VERSION);
+    expect(Date.parse(BUNDLED_MODEL.trainedThrough!)).toBeGreaterThan(Date.parse(BUNDLED_MODEL.trainedFrom!));
+    for (const horizon of Object.values(BUNDLED_MODEL.horizons)) {
+      expect(horizon.weights).toHaveLength(FEATURE_KEYS.length);
+      expect(EXIT_PROFILES.map(p => p.id)).toContain(horizon.exitProfile);
+    }
   });
 });
 

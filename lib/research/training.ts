@@ -153,7 +153,7 @@ export function fitHorizon(candidates: Candidate[], timeframe: Timeframe): { mod
     selectedWinRate: source.report.selectedWinRate,
     selectedMeanR: source.report.selectedMeanR, calibration };
   const reason = validated ? `Holdout AUC ${source.report.auc?.toFixed(3)}; ${source.report.selected} selected trades averaged ${source.report.selectedMeanR?.toFixed(3)}R versus ${source.report.allMeanR.toFixed(3)}R for every candidate.`
-    : `Holdout checks not met (AUC ≥0.55, ≥15 selected trades, positive 90% bootstrap lower bound on selected mean R, and better than the candidate average). Rule-based fallback applies.`;
+    : `Holdout checks not met (AUC ≥0.55, ≥15 selected trades, positive 90% bootstrap lower bound on selected mean R, and better than the candidate average). This horizon stays research-only: no BUY plans.`;
   return { profiles, model: { ...final, exitProfile: profile, minimumEdgeR: validated ? source.report.threshold : 0, avgWinR: mean(wins) ?? 0, avgLossR: -(mean(losses) ?? 0),
     samples: all.length, wins: wins.length, validated, validation: validation_, reason } };
 }
