@@ -936,12 +936,9 @@ h1 { font-size: clamp(29px, 2.2vw, 39px); font-weight: 650; line-height: 1.28; l
 .candle-percent-grid strong { font-size: 24px; font-weight: 550; font-variant-numeric: tabular-nums; }
 .chart-canvas-wrapper { position: relative; min-width: 0; transition: height .2s; }
 .chart-canvas.advanced-canvas { height: 100%; min-height: 0; }
-.candle-hover-tooltip { position: absolute; top: 12px; width: 240px; z-index: 4; background: #17263bf2; border: 1px solid #6b8ab3; border-radius: 8px; padding: 14px 16px; box-shadow: 0 8px 24px #040a1640; pointer-events: none; }
-.candle-hover-tooltip > span { color: #b6cce9; font-size: 14px; }
-.candle-hover-tooltip > strong { display: block; font-size: 27px; margin: 8px 0 12px; font-variant-numeric: tabular-nums; }
-.candle-hover-tooltip small { font-size: 13px; font-weight: 400; margin-left: 9px; color: #a6bddc; }
-.candle-hover-tooltip > div { display: flex; flex-direction: column; gap: 5px; font-size: 14px; color: #a5b9d6; }
-.candle-hover-tooltip b { float: right; color: #d9e8ff; font-weight: 500; }
+.candle-hover-tooltip { position: absolute; top: 12px; width: 176px; max-width: calc(100% - 16px); z-index: 4; background: #17263bf2; border: 1px solid #6b8ab3; border-radius: 6px; padding: 8px 10px; box-shadow: 0 4px 12px #040a1640; pointer-events: none; }
+.candle-hover-tooltip > span { display: block; color: #b6cce9; font-size: 12px; line-height: 1.4; }
+.candle-hover-tooltip > strong { display: block; font-size: 24px; line-height: 1.2; margin-top: 3px; font-variant-numeric: tabular-nums; }
 .chart-navigation-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 17px; border-top: 1px solid #33435b; }
 .chart-ranges, .chart-zoom { display: flex; gap: 7px; }
 .chart-ranges button { padding: 6px 10px; border: 1px solid #344861; border-radius: 5px; color: #b0c6e4; font-size: 14px; }
