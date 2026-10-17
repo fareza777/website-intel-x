@@ -3,7 +3,7 @@ import { breadthOf, type MarketContext } from "./context";
 import { DEFAULT_ROTATION, rotationSignal, type RotationSignal } from "./rotation";
 import { BUNDLED_MODEL } from "./bundled-model";
 import { archiveFetcher, fetchDerivativeDays, requiredDays, type ArchiveFetcher, type DerivativeDay } from "./derivatives";
-import { get24hTickers, getCandles, getExchangeSymbols, getExchangeTime, MarketDataError, marketSource, publicError } from "./binance";
+import { get24hTickers, get7dQuoteVolumes, getCandles, getExchangeSymbols, getExchangeTime, MarketDataError, marketSource, publicError } from "./binance";
 import { DEFAULT_COSTS } from "./risk";
 import { analyzeSymbol, MIN_QUOTE_VOLUME } from "./setup";
 import { compareOpportunities } from "../opportunities";
@@ -39,12 +39,27 @@ async function loadDerivatives(symbols: string[], now: number, fetcher: ArchiveF
   return result;
 }
 
+/**
+ * Rank the automatic universe by average daily USDT volume over the last 7 days, so a one-day spike
+ * cannot push a market into the top list. Falls back to 24h volume if the weekly ticker is unavailable.
+ */
+async function rankUniverse<T extends { symbol: string; quoteVolume24h: number }>(markets: T[], limit: number): Promise<{ ranked: T[]; ranking: "7d-average" | "24h" }> {
+  let weekly: Map<string, number> | null = null;
+  try { weekly = await get7dQuoteVolumes(markets.map(market => market.symbol)); } catch { weekly = null; }
+  if (weekly && weekly.size === 0) weekly = null;
+  const daily = (market: T) => weekly ? (weekly.get(market.symbol) ?? 0) / 7 : market.quoteVolume24h;
+  const ranked = markets.filter(market => daily(market) >= MIN_QUOTE_VOLUME)
+    .sort((a, b) => daily(b) - daily(a) || a.symbol.localeCompare(b.symbol)).slice(0, limit);
+  return { ranked, ranking: weekly ? "7d-average" : "24h" };
+}
+
 export async function scanMarket(options: { symbols?: string[]; limit?: number; derivatives?: ArchiveFetcher | null } = {}): Promise<MarketSnapshot> {
   const startedAt = Date.now();
   const errors: MarketSnapshot["errors"] = [];
   let universeSize = 0;
   let now = startedAt;
   let rotation: RotationSignal | undefined;
+  let universeRanking: "7d-average" | "24h" = "24h";
   const frames: Timeframe[] = ["15m", "1h", "4h", "1d"];
   const timeframes: Record<Timeframe, MarketSetup[]> = { "15m": [], "1h": [], "4h": [], "1d": [] };
   const snapshot = (): MarketSnapshot => {
@@ -54,7 +69,7 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number; 
     return { version: 1, generatedAt: new Date(now).toISOString(),
       dataAsOf: available.length ? (setups.length ? setups : available).map((setup) => setup.asOf).sort()[0] : null,
       status: !available.length ? "unavailable" : errors.length ? "partial" : "live", source: marketSource(), universeSize, scanned: setups.length,
-      errors, setups, timeframes, durationMs: Date.now() - startedAt, costs: { ...DEFAULT_COSTS }, ...(rotation ? { rotation } : {}) };
+      errors, setups, timeframes, durationMs: Date.now() - startedAt, costs: { ...DEFAULT_COSTS }, universeRanking: options.symbols ? "watchlist" : universeRanking, ...(rotation ? { rotation } : {}) };
   };
   try {
     const limit = options.limit ?? 50;
@@ -78,10 +93,11 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number; 
         if (!info || !ticker) { errors.push({ symbol, message: "Symbol is not an eligible trading USDT spot market with valid ticker/filter data" }); return []; }
         return [{ ...info, ...ticker }];
       })
-      : tradable.flatMap((symbol) => {
+      : await rankUniverse(tradable.flatMap((symbol) => {
         const ticker = tickerMap.get(symbol.symbol);
-        return ticker && ticker.quoteVolume24h >= MIN_QUOTE_VOLUME ? [{ ...symbol, ...ticker }] : [];
-      }).sort((a, b) => b.quoteVolume24h - a.quoteVolume24h || a.symbol.localeCompare(b.symbol)).slice(0, limit);
+        // A loose 24h pre-filter keeps the 7-day request small; the ranking itself uses the weekly average.
+        return ticker && ticker.quoteVolume24h >= MIN_QUOTE_VOLUME / 5 ? [{ ...symbol, ...ticker }] : [];
+      }), limit).then(({ ranked, ranking }) => { universeRanking = ranking; return ranked; });
     universeSize = requested ? Math.min(requested.length, options.limit ?? 50) : universe.length;
     if (!requested && universe.length < 20) throw new MarketDataError("Fewer than 20 liquid, eligible USDT spot markets are available; automatic scan withheld");
     type Fetched = { market: (typeof universe)[number]; candles: Record<Timeframe, Candle[]>; fetchErrors: string[] };

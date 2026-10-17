@@ -33,6 +33,43 @@ beforeEach(() => vi.resetModules());
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("scanner universe and data status", () => {
+  it("ranks the automatic universe by 7-day average volume so a one-day spike cannot buy a place", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(now);
+    const bases = Array.from({ length: 55 }, (_, index) => `ASSET${String(index).padStart(2, "0")}`);
+    const requests: URL[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      const parsed = new URL(String(url)); requests.push(parsed);
+      if (parsed.pathname.endsWith("/time")) return Response.json({ serverTime: now });
+      if (parsed.pathname.endsWith("/exchangeInfo")) return Response.json({ timezone: "UTC", serverTime: now, rateLimits: [], exchangeFilters: [], symbols: bases.map(exchangeSymbol) });
+      if (parsed.pathname.endsWith("/ticker/24hr")) return Response.json(bases.map((base, index) => ({ symbol: `${base}USDT`, lastPrice: "125", priceChangePercent: "2", quoteVolume: String(index === 0 ? 900_000_000 : 50_000_000 - index * 10_000) })));
+      if (parsed.pathname.endsWith("/ticker")) {
+        expect(parsed.searchParams.get("windowSize")).toBe("7d");
+        const symbols = JSON.parse(parsed.searchParams.get("symbols")!) as string[];
+        // ASSET00 spiked today but averaged little; ASSET54 traded steadily all week.
+        return Response.json(symbols.map(symbol => ({ symbol, quoteVolume: String(symbol === "ASSET00USDT" ? 7 * 2_000_000 : symbol === "ASSET54USDT" ? 7 * 900_000_000 : 7 * 40_000_000) })));
+      }
+      const interval = parsed.searchParams.get("interval") as Timeframe;
+      return Response.json(candles(interval));
+    });
+    const { scanMarket } = await import("../lib/market/scanner");
+    const pending = scanMarket({ limit: 20 });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(result.universeRanking).toBe("7d-average");
+    expect(result.setups.map(setup => setup.symbol)).toContain("ASSET54USDT");
+    expect(result.setups.map(setup => setup.symbol)).not.toContain("ASSET00USDT");
+    expect(requests.filter(url => url.pathname.endsWith("/ticker"))).toHaveLength(1);
+  });
+
+  it("falls back to 24h ranking when the weekly ticker is unavailable", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(now);
+    feed(Array.from({ length: 25 }, (_, index) => `ASSET${String(index).padStart(2, "0")}`));
+    const { scanMarket } = await import("../lib/market/scanner");
+    const pending = scanMarket({ limit: 20 });
+    await vi.runAllTimersAsync();
+    expect((await pending).universeRanking).toBe("24h");
+  });
+
   it("allows a one-symbol explicit watchlist and reports missing markets as partial", async () => {
     const requests = feed(["BTC", "ETH"], "ETHUSDT");
     const { scanMarket } = await import("../lib/market/scanner");

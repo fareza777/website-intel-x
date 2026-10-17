@@ -275,6 +275,21 @@ export async function getExchangeSymbols(): Promise<ExchangeSymbol[]> {
 }
 
 /** A single all-symbol ticker GET avoids repeated high-weight per-symbol metadata calls. */
+/** Rolling 7-day quote volume (USDT) per symbol, from Binance's windowed ticker in batches of 100 symbols. */
+export async function get7dQuoteVolumes(symbols: string[]): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  for (let i = 0; i < symbols.length; i += 100) {
+    const batch = symbols.slice(i, i + 100).map(normalizeSymbol);
+    const { data } = await request("ticker", { symbols: JSON.stringify(batch), windowSize: "7d", type: "MINI" });
+    if (!Array.isArray(data)) throw new MarketDataError("Invalid 7-day market ticker response");
+    for (const raw of data) {
+      const row = object(raw), volume = number(row.quoteVolume);
+      if (typeof row.symbol === "string" && Number.isFinite(volume) && volume >= 0) result.set(row.symbol, volume);
+    }
+  }
+  return result;
+}
+
 export async function get24hTickers(): Promise<Ticker24h[]> {
   const { data } = await request("ticker/24hr");
   if (!Array.isArray(data)) throw new MarketDataError("Invalid 24-hour market ticker response");

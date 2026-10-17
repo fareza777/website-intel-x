@@ -71,7 +71,7 @@ node scripts/data-branch.mjs publish
 
 These commands write runtime files only under ignored `data/`. The helper builds a separate Git tree through a temporary index and leaves the source checkout, HEAD and index untouched. It creates an orphan data history on the first publication and uses normal fast-forward pushes thereafter. It refuses concurrent remote changes or archive rewrites; it never force-pushes. Keep source code on `main` and runtime state on `market-data`.
 
-Set `SCAN_SYMBOLS` to a comma/space-separated list of one to fifty USDT markets, or leave it empty for the fifty highest-volume eligible markets. `SCAN_LIMIT` optionally changes the automatic universe to twenty through fifty, or intentionally caps an explicit watchlist. Stablecoins, known tokenized securities and leveraged tokens are excluded. A new listing without enough closed history remains an explicit partial-scan error.
+Set `SCAN_SYMBOLS` to a comma/space-separated list of one to fifty USDT markets, or leave it empty for the fifty eligible markets with the highest average daily USDT volume over the last seven days (Binance's rolling `windowSize=7d` ticker, falling back to 24h volume if unavailable), so a one-day spike cannot buy a place. `SCAN_LIMIT` optionally changes the automatic universe to twenty through fifty, or intentionally caps an explicit watchlist. Stablecoins, known tokenized securities and leveraged tokens are excluded. A new listing without enough closed history remains an explicit partial-scan error.
 
 ## What the numbers mean
 

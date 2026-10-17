@@ -147,6 +147,8 @@ export interface MarketSnapshot {
   timeframes?: Record<ContextTimeframe, MarketSetup[]> & Partial<Record<"15m", MarketSetup[]>>;
   durationMs: number;
   costs: { feeBps: number; slippageBps: number };
+  /** How the automatic universe was ranked: 7-day average daily USDT volume, 24h fallback, or a watchlist. */
+  universeRanking?: "7d-average" | "24h" | "watchlist";
   /** Momentum Rotation portfolio from the same closed daily candles. */
   rotation?: import("./market/rotation").RotationSignal;
 }
