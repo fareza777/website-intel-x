@@ -1,0 +1,20 @@
+name: Probe weekly ticker
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/workflows/probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          for host in https://data-api.binance.vision https://api.binance.com; do
+            echo "== $host small"
+            curl -sS -m 20 -G "$host/api/v3/ticker" --data-urlencode 'symbols=["BTCUSDT","ETHUSDT"]' --data-urlencode 'windowSize=7d' --data-urlencode 'type=MINI' -w "\nHTTP %{http_code}\n" | head -c 600; echo
+          done
+          SYMS=$(curl -sS -m 20 "https://data-api.binance.vision/api/v3/exchangeInfo?permissions=SPOT" | python3 -c "import sys,json; d=json.load(sys.stdin); s=[x['symbol'] for x in d['symbols'] if x['quoteAsset']=='USDT' and x['status']=='TRADING'][:100]; print(json.dumps(s,separators=(',',':')))")
+          echo "== 100 symbols"
+          curl -sS -m 30 -G "https://data-api.binance.vision/api/v3/ticker" --data-urlencode "symbols=$SYMS" --data-urlencode 'windowSize=7d' --data-urlencode 'type=MINI' -w "\nHTTP %{http_code}\n" | tail -c 400; echo
