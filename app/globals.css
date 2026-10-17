@@ -1506,7 +1506,7 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .rotation-evidence .summary-note { display: flex; gap: 6px; align-items: center; padding: 0 18px 18px; }
 
 /* Motion */
-.view-stack > *, .market-pulse, .stat-grid > *, .opportunity-grid > *, .trading-layout > * { animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; }
+.view-stack > *, .market-pulse, .stat-grid > *, .opportunity-grid > *, .trading-layout > * { animation: rise .5s cubic-bezier(.2, .8, .2, 1) backwards; }
 .stat-grid > *:nth-child(2), .opportunity-grid > *:nth-child(2) { animation-delay: .05s; }
 .stat-grid > *:nth-child(3), .opportunity-grid > *:nth-child(3) { animation-delay: .1s; }
 .stat-grid > *:nth-child(4) { animation-delay: .15s; }
@@ -1600,6 +1600,8 @@ body::after { content: ""; position: fixed; inset: -20%; z-index: -1; pointer-ev
 
 /* BUY cards: calm static highlight, no motion */
 .opportunity-card:has(.action-badge.buy) { border-color: rgba(45, 212, 191, .45); box-shadow: 0 0 0 1px rgba(45, 212, 191, .15), 0 18px 40px -24px rgba(45, 212, 191, .7); }
+/* Same lift as other cards, with the BUY card's own teal light. */
+.opportunity-card:has(.action-badge.buy):hover { transform: translateY(-3px); border-color: rgba(45, 212, 191, .8); box-shadow: 0 0 0 1px rgba(45, 212, 191, .35), 0 0 32px -6px rgba(45, 212, 191, .45), 0 22px 50px -20px rgba(56, 189, 248, .55); }
 
 /* Movers + activity row */
 .motion-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; margin: 0 0 28px; }
