@@ -31,7 +31,7 @@ describe("v4 practical spot qualification", () => {
     expect(setup.qualification?.find(c => c.id === "participation")?.passed).toBe(false);
     expect(setup.qualification?.find(c => c.id === "momentum")?.requiredFor).toBe("context");
     expect(setup.qualification?.filter(c => c.requiredFor !== "context").every(c => c.passed)).toBe(true);
-    expect(setup.id).toContain("cx-spot-5");
+    expect(setup.id).toContain("cx-spot-6");
   });
   it("keeps a high-scoring market on WAIT when no bullish price trigger has closed", () => {
     const input = source(), candle = input.candles["1d"].at(-1)!;

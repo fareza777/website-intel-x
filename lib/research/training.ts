@@ -183,7 +183,7 @@ export function buildModel(candidates: Candidate[], meta: { strategyVersion: str
     profiles[timeframe] = result.profiles;
     if (result.model) horizons[timeframe] = result.model;
   }
-  return { profiles, model: { version: `cx-model-${meta.trainedThrough.slice(0, 10)}`, featureVersion: FEATURE_VERSION, ...meta, horizons, notes: [
+  return { profiles, model: { version: `cx-model-f${FEATURE_VERSION}-${Math.round((Date.parse(meta.trainedThrough) - Date.parse(meta.trainedFrom)) / 86_400_000)}d-${meta.trainedThrough.slice(0, 10)}`, featureVersion: FEATURE_VERSION, ...meta, horizons, notes: [
     `Logistic regression and gradient-boosted trees over ${FEATURE_KEYS.length} causal features (price, BTC context and lagged futures positioning), trained on long-entry candidates that pass every mandatory safety, trend, trigger and regime check.`,
     "Labels replay the production limit-entry, stop-first, scale-out, trailing-stop and time-exit engine with fees and slippage. Unfilled entries are excluded.",
     "Exit profile, learner and minimum edge are chosen on a purged chronological holdout (last 30% of training decisions); the deployed model is refitted on all training rows.",

@@ -1,5 +1,5 @@
 import type { MarketSetup, Timeframe } from "../types";
-export const STRATEGY_VERSION = "cx-spot-5";
+export const STRATEGY_VERSION = "cx-spot-6";
 /** Fixed application tolerances, frozen before replay; not optimized profit parameters. */
 export const QUALIFICATION_POLICIES: Record<Timeframe, NonNullable<MarketSetup["policy"]>> = {
   "15m": { maximumAtrPct: 4, maximumStopRiskPct: 8, minimumBuyScore: 78 },

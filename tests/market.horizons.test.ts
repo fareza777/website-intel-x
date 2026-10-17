@@ -62,7 +62,7 @@ describe("independent causal setup horizons", () => {
       const timeframe = horizons[index];
       expect(setup.timeframe).toBe(timeframe);
       expect(setup.id).toContain(`-${timeframe}-`);
-      expect(setup.id).toContain("cx-spot-5");
+      expect(setup.id).toContain("cx-spot-6");
       expect(setup.asOf).toBe(new Date(source.candles[timeframe].at(-1)!.closeTime).toISOString());
       expect(setup.plan).not.toBeNull();
       expect(setup.plan!.entry).toBeCloseTo(Math.floor((setup.price - setup.indicators[timeframe].atr * 0.1) / 0.01 + 1e-10) * 0.01, 8);
