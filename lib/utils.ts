@@ -8,6 +8,13 @@ export function price(value: number | null | undefined, compact = false): string
   const magnitude = Math.abs(value);
   return new Intl.NumberFormat("en-US", { minimumFractionDigits: magnitude >= 1 ? 2 : 4, maximumFractionDigits: 8 }).format(value);
 }
+/** Derived statistics (VWAP, POC, profile bins) are estimates; show them without noise digits. Exchange levels keep `price`. */
+export function approxPrice(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const magnitude = Math.abs(value);
+  return magnitude >= 1 ? new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: magnitude >= 1000 ? 2 : 4 }).format(value)
+    : new Intl.NumberFormat("en-US", { maximumSignificantDigits: 5 }).format(value);
+}
 export function decimalPlaces(value: number): number {
   const [mantissa, exponent = "0"] = value.toString().toLowerCase().split("e");
   return Math.max(0, Math.min(12, (mantissa.split(".")[1]?.length || 0) - Number(exponent)));

@@ -4,7 +4,7 @@ import { cachedScan } from "@/lib/server-market";
 import { symbolSchema } from "@/lib/validation";
 import { isSameOriginRequest } from "@/lib/request-origin";
 export const maxDuration = 60;
-const schema = z.object({ symbols: z.array(symbolSchema).min(1).max(50).optional(), limit: z.number().int().min(20).max(50).default(30) });
+const schema = z.object({ symbols: z.array(symbolSchema).min(1).max(50).optional(), limit: z.number().int().min(20).max(50).default(50) });
 let lastRequest = 0;
 export async function POST(request: Request) {
   if (!isSameOriginRequest(request)) return NextResponse.json({ error: "Cross-origin scan requests are not accepted." }, { status: 403 });

@@ -39,7 +39,7 @@ jobs:
     env:
       DATA_DIRECTORY: data
       SCAN_SYMBOLS: ${{ inputs.symbols || vars.SCAN_SYMBOLS || '' }}
-      SCAN_LIMIT: ${{ vars.SCAN_LIMIT || '' }}
+      SCAN_LIMIT: ${{ vars.SCAN_LIMIT || '50' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -95,6 +95,12 @@ jobs:
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
         run: npm run scan -- --publish
         timeout-minutes: 4
+      - name: Audit published state invariants
+        # Independent recomputation of actions, levels, model probabilities and rotation weights.
+        if: steps.scan.outcome == 'success'
+        continue-on-error: true
+        run: npx tsx scripts/audit-state.ts data/state.json
+        timeout-minutes: 2
       - name: Persist diagnostics and state even after an exchange outage
         if: always() && !cancelled() && steps.restore.outcome == 'success'
         run: node scripts/data-branch.mjs publish

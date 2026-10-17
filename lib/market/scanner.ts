@@ -28,9 +28,9 @@ const TOKENIZED_SECURITIES = new Set([
 async function loadDerivatives(symbols: string[], now: number, fetcher: ArchiveFetcher): Promise<Record<string, DerivativeDay[]>> {
   const [first, last] = requiredDays(now);
   const result: Record<string, DerivativeDay[]> = {};
-  const deadline = Date.now() + 25_000;
+  const deadline = Date.now() + 40_000;
   let cursor = 0;
-  await Promise.all(Array.from({ length: 4 }, async () => {
+  await Promise.all(Array.from({ length: 6 }, async () => {
     while (cursor < symbols.length && Date.now() < deadline) {
       const symbol = symbols[cursor++];
       try { result[symbol] = await fetchDerivativeDays(symbol, first, last, { fetcher, concurrency: 4 }); } catch { /* Missing positioning data stays null. */ }
@@ -57,7 +57,7 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number; 
       errors, setups, timeframes, durationMs: Date.now() - startedAt, costs: { ...DEFAULT_COSTS }, ...(rotation ? { rotation } : {}) };
   };
   try {
-    const limit = options.limit ?? 30;
+    const limit = options.limit ?? 50;
     if (!Number.isInteger(limit) || limit < (options.symbols ? 1 : 20) || limit > 50) throw new MarketDataError(options.symbols ? "Watchlist limit must be an integer from 1 to 50" : "Automatic universe limit must be an integer from 20 to 50");
     const requested = options.symbols ? [...new Set(options.symbols.map((symbol) => symbol.trim().toUpperCase()))] : null;
     if (requested && (requested.length < 1 || requested.length > 50 || requested.some((symbol) => !/^[A-Z0-9]{1,26}USDT$/.test(symbol)))) throw new MarketDataError("Explicit watchlists must contain 1–50 valid USDT symbols");

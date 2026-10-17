@@ -31,7 +31,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dial
 type View = WorkspacePage;
 interface TerminalData { snapshot: MarketSnapshot; signals: TrackedSignal[]; alerts: SignalEvent[]; analytics: AnalyticsReport | null; scannerValidation?: import("@/lib/research/types").ScannerValidationReport | null; persistence: string; preview: boolean; stale: boolean }
 interface Preferences { capital: number; risk: number; universe: number; useWatchlist: boolean; largeText: boolean }
-const defaults: Preferences = { capital: 10000, risk: 1, universe: 30, useWatchlist: false, largeText: false };
+const defaults: Preferences = { capital: 10000, risk: 1, universe: 50, useWatchlist: false, largeText: false };
 const navigation: { id: View; label: string; icon: ElementType; group?: string }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard, group: "WORKSPACE" },
   { id: "radar", label: "Opportunity radar", icon: Radio },

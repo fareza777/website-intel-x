@@ -89,8 +89,8 @@ def risk_comparison(strategy: dict) -> str:
     maximum_drawdown = abs(float(qs.stats.max_drawdown(hourly_returns))) * 100
     sharpe = (float(qs.stats.sharpe(daily_returns, rf=0, periods=365))
               if len(daily_returns) > 1 and float(daily_returns.std()) > 0 else None)
-    sharpe_text = f"{sharpe:.3f}" if sharpe is not None and math.isfinite(sharpe) else "undefined"
-    drawdown_text = f"{maximum_drawdown:.3f}%" if math.isfinite(maximum_drawdown) else "undefined"
+    sharpe_text = f"{sharpe:.3f}" if sharpe is not None and math.isfinite(sharpe) else "not defined (flat equity, no trades)"
+    drawdown_text = f"{maximum_drawdown:.3f}%" if math.isfinite(maximum_drawdown) else "not defined"
     return (f"QuantStats {_version('quantstats')}, {strategy['name']}: hourly equity max drawdown "
             f"{drawdown_text}; daily UTC Sharpe {sharpe_text} (365 periods/year, risk-free 0). "
             "Uses supplied costed out-of-sample equity only; no benchmark download or HTML report.")

@@ -8,7 +8,7 @@ The local commands are `node scripts/data-branch.mjs restore`, `npm run scan -- 
 
 Archives must be plain files and append-only. Restoration merges unique local archive records after the remote bytes, preserving unpublished local records where possible. An id collision with different content stops the operation. Missing local archive files remain in the remote tree. Source HEAD, working files and the source index are not switched or reset.
 
-The scanner validates `SCAN_SYMBOLS` as one to fifty unique USDT symbols. An explicit fifty-symbol watchlist is not silently capped at the automatic default of thirty. Automatic universes require twenty to fifty eligible liquid markets. Binance requests use a bounded public-data queue, cache, retries and exchange rate-limit cooldown; falling back to another host never bypasses throttling.
+The scanner validates `SCAN_SYMBOLS` as one to fifty unique USDT symbols. An explicit fifty-symbol watchlist is not silently capped at the automatic default of fifty. Automatic universes require twenty to fifty eligible liquid markets. Binance requests use a bounded public-data queue, cache, retries and exchange rate-limit cooldown; falling back to another host never bypasses throttling.
 
 ## Timing and simulation
 

@@ -1546,3 +1546,11 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .numeric small, .numeric span:not(.positive):not(.negative) { font-family: var(--font-ui), sans-serif; letter-spacing: 0; }
 .market-table th, .market-table td { padding-left: 11px; padding-right: 11px; }
 .market-table th:first-child, .market-table td:first-child { padding-left: 20px; }
+
+.alert-market { font-style: normal; margin-left: 10px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 650; color: var(--accent); background: var(--accent-soft); border: 1px solid rgba(125, 211, 252, .25); vertical-align: 1px; }
+/* Big statistics use the UI face with tabular figures so long amounts stay on one line. */
+.stat-card > strong { font-family: var(--font-ui), sans-serif; font-variant-numeric: tabular-nums; font-size: clamp(24px, 2.2vw, 32px); white-space: nowrap; letter-spacing: -.03em; }
+.engine-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.engine-filter > span { font-size: 12px; letter-spacing: .12em; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+.engine-filter .segment > button { text-transform: none; }
+.scale-note { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; color: var(--positive); background: var(--positive-soft); border: 1px solid rgba(45, 212, 191, .3); }

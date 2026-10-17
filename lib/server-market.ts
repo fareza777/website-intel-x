@@ -1,7 +1,7 @@
 import { scanMarket } from "./market/scanner";
 import type { MarketSnapshot } from "./types";
 const cache = new Map<string, { expires: number; result: Promise<MarketSnapshot> }>();
-export function cachedScan(symbols?: string[], limit = 30): Promise<MarketSnapshot> {
+export function cachedScan(symbols?: string[], limit = 50): Promise<MarketSnapshot> {
   const key = symbols ? [...symbols].sort().join(",") : `top:${limit}`;
   const current = cache.get(key);
   if (current && current.expires > Date.now()) return current.result;

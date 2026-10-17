@@ -85,7 +85,7 @@ describe("scanner universe and data status", () => {
     expect(result.setups.map((setup) => setup.symbol)).toEqual(["BTCUSDT", "FUSDT"]);
   });
 
-  it("chooses the highest-volume 30 markets by default and caps an expanded scan at 50", async () => {
+  it("chooses the highest-volume 50 markets by default and accepts a smaller automatic universe", async () => {
     vi.useFakeTimers(); vi.setSystemTime(now);
     const bases = Array.from({ length: 55 }, (_, index) => `ASSET${String(index).padStart(2, "0")}`);
     const requests = feed(bases);
@@ -94,17 +94,17 @@ describe("scanner universe and data status", () => {
     await vi.runAllTimersAsync();
     const first = await firstPending;
     expect(first.status).toBe("live");
-    expect(first.universeSize).toBe(30);
-    expect(first.setups.map((setup) => setup.symbol)).toEqual(bases.slice(0, 30).map((base) => `${base}USDT`));
-    expect(requests.filter((url) => url.pathname.endsWith("/klines"))).toHaveLength(124); // 30 markets × 4 frames + BTC market context
+    expect(first.universeSize).toBe(50);
+    expect(first.setups.map((setup) => setup.symbol)).toEqual(bases.slice(0, 50).map((base) => `${base}USDT`));
+    expect(requests.filter((url) => url.pathname.endsWith("/klines"))).toHaveLength(204); // 50 markets × 4 frames + BTC market context
     expect(first.timeframes?.["1h"]).toEqual(first.setups);
-    expect(first.timeframes?.["4h"]).toHaveLength(30);
-    expect(first.timeframes?.["1d"]).toHaveLength(30);
-    const expandedPending = scanMarket({ limit: 50 });
+    expect(first.timeframes?.["4h"]).toHaveLength(50);
+    expect(first.timeframes?.["1d"]).toHaveLength(50);
+    const smallerPending = scanMarket({ limit: 30 });
     await vi.runAllTimersAsync();
-    const expanded = await expandedPending;
-    expect(expanded.universeSize).toBe(50);
-    expect(expanded.scanned).toBe(50);
+    const smaller = await smallerPending;
+    expect(smaller.universeSize).toBe(30);
+    expect(smaller.scanned).toBe(30);
     expect(requests.filter((url) => url.pathname.endsWith("/exchangeInfo"))).toHaveLength(1);
     expect(requests.filter((url) => url.pathname.endsWith("/ticker/24hr"))).toHaveLength(1);
     expect((await scanMarket({ symbols: bases.map((base) => `${base}USDT`) })).status).toBe("unavailable");
