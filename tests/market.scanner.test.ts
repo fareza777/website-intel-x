@@ -40,8 +40,8 @@ describe("scanner universe and data status", () => {
     vi.stubGlobal("fetch", async (url: string) => {
       const parsed = new URL(String(url)); requests.push(parsed);
       if (parsed.pathname.endsWith("/time")) return Response.json({ serverTime: now });
-      if (parsed.pathname.endsWith("/exchangeInfo")) return Response.json({ timezone: "UTC", serverTime: now, rateLimits: [], exchangeFilters: [], symbols: bases.map(exchangeSymbol) });
-      if (parsed.pathname.endsWith("/ticker/24hr")) return Response.json(bases.map((base, index) => ({ symbol: `${base}USDT`, lastPrice: "125", priceChangePercent: "2", quoteVolume: String(index === 0 ? 900_000_000 : 50_000_000 - index * 10_000) })));
+      if (parsed.pathname.endsWith("/exchangeInfo")) return Response.json({ timezone: "UTC", serverTime: now, rateLimits: [], exchangeFilters: [], symbols: [...bases, "币安人生"].map(exchangeSymbol) });
+      if (parsed.pathname.endsWith("/ticker/24hr")) return Response.json([...bases, "币安人生"].map((base, index) => ({ symbol: `${base}USDT`, lastPrice: "125", priceChangePercent: "2", quoteVolume: String(index === 0 ? 900_000_000 : 50_000_000 - index * 10_000) })));
       if (parsed.pathname.endsWith("/ticker")) {
         expect(parsed.searchParams.get("windowSize")).toBe("7d");
         const symbols = JSON.parse(parsed.searchParams.get("symbols")!) as string[];
@@ -56,6 +56,8 @@ describe("scanner universe and data status", () => {
     await vi.runAllTimersAsync();
     const result = await pending;
     expect(result.universeRanking).toBe("7d-average");
+    // A non-ASCII listing must not reach the weekly request and break the whole batch.
+    expect(requests.filter(url => url.pathname.endsWith("/ticker")).every(url => !url.searchParams.get("symbols")!.includes("币"))).toBe(true);
     expect(result.setups.map(setup => setup.symbol)).toContain("ASSET54USDT");
     expect(result.setups.map(setup => setup.symbol)).not.toContain("ASSET00USDT");
     expect(requests.filter(url => url.pathname.endsWith("/ticker"))).toHaveLength(1);

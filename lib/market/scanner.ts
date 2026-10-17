@@ -84,7 +84,8 @@ export async function scanMarket(options: { symbols?: string[]; limit?: number; 
     const tickers = tickerResult.value;
     now = timeResult.value;
     const tickerMap = new Map(tickers.map((ticker) => [ticker.symbol, ticker]));
-    const tradable = exchangeSymbols.filter((symbol) => symbol.status === "TRADING" && symbol.spotAllowed && symbol.quoteAsset === "USDT"
+    // Symbols outside the ASCII pattern (e.g. Binance's non-Latin listings) cannot be requested or validated downstream.
+    const tradable = exchangeSymbols.filter((symbol) => symbol.status === "TRADING" && symbol.spotAllowed && symbol.quoteAsset === "USDT" && /^[A-Z0-9]{1,26}USDT$/.test(symbol.symbol)
       && !STABLE_ASSETS.has(symbol.baseAsset) && !TOKENIZED_SECURITIES.has(symbol.baseAsset) && !/^[A-Z0-9]{2,}(UP|DOWN|BULL|BEAR)$/.test(symbol.baseAsset));
     const symbolMap = new Map(tradable.map((symbol) => [symbol.symbol, symbol]));
     const universe = requested
