@@ -3,6 +3,14 @@ name: Publish market data
 on:
   schedule:
     - cron: '17 * * * *'
+  # Publish fresh research as soon as engine changes reach main; scheduled runs can lag by hours.
+  push:
+    branches: [main]
+    paths:
+      - 'lib/market/**'
+      - 'lib/tracking.ts'
+      - 'scripts/scan.ts'
+      - '.github/workflows/market-data.yml'
   workflow_dispatch:
     inputs:
       symbols:
