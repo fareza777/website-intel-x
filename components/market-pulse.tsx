@@ -2,6 +2,7 @@
 import { ArrowUpRight, Orbit } from "lucide-react";
 import type { MarketSetup, MarketSnapshot, Timeframe } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { CountUp } from "./live-motion";
 
 /** Overview hero: one glance at market tone, participation and what the engine is willing to do. */
 export function MarketPulse({ setups, snapshot, timeframe, onRotation }: { setups: MarketSetup[]; snapshot: MarketSnapshot; timeframe: Timeframe; onRotation: () => void }) {
@@ -22,7 +23,7 @@ export function MarketPulse({ setups, snapshot, timeframe, onRotation }: { setup
       <p>{market?.detail ?? "Market context arrives with the next scheduled scan."}</p>
     </div>
     <div className="pulse-kpis">
-      <div className="kpi"><span>Qualified BUY</span><strong className="glow-buy">{buys}</strong><small>{waits} waiting for a trigger</small></div>
+      <div className="kpi"><span>Qualified BUY</span><strong className="glow-buy"><CountUp value={buys} /></strong><small>{waits} waiting for a trigger</small></div>
       <div className="kpi"><span>Breadth</span><div className="kpi-ring" style={{ ["--p" as string]: `${pct ?? 0}%` }}><strong>{pct === null ? "—" : `${pct}%`}</strong></div><small>above EMA50</small></div>
       <div className="kpi"><span>BTC trend</span><strong className={market?.btcTrend === "bullish" ? "positive" : market?.btcTrend === "bearish" ? "negative" : "muted"}>{market?.btcTrend ?? "—"}</strong><small>higher timeframe</small></div>
       <button className="kpi kpi-link" onClick={onRotation}><span><Orbit size={14} /> Rotation</span><strong className={rotation?.regimeOn ? "positive" : "muted"}>{rotation ? rotation.regimeOn ? rotation.picks.map(pick => pick.symbol.replace(/USDT$/, "")).join(" · ") || "—" : "Cash" : "—"}</strong><small>Open portfolio <ArrowUpRight size={13} /></small></button>

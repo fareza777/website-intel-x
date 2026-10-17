@@ -1554,3 +1554,102 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .engine-filter > span { font-size: 12px; letter-spacing: .12em; color: var(--muted); font-weight: 700; text-transform: uppercase; }
 .engine-filter .segment > button { text-transform: none; }
 .scale-note { margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; color: var(--positive); background: var(--positive-soft); border: 1px solid rgba(45, 212, 191, .3); }
+
+/* ==========================================================================
+   Live motion · ticker tape, price flashes, movers, activity stream, aurora
+   ========================================================================== */
+/* Aurora: slow drifting light behind everything (transform-only, GPU friendly). */
+body::after { content: ""; position: fixed; inset: -20%; z-index: -1; pointer-events: none; opacity: .55; filter: blur(60px);
+  background: radial-gradient(35% 30% at 20% 30%, rgba(56, 189, 248, .22), transparent 70%), radial-gradient(30% 28% at 80% 20%, rgba(167, 139, 250, .2), transparent 70%), radial-gradient(32% 30% at 60% 85%, rgba(45, 212, 191, .14), transparent 70%);
+  animation: aurora 28s ease-in-out infinite alternate; }
+@keyframes aurora { 0% { transform: translate3d(-3%, -2%, 0) rotate(0deg) scale(1); } 50% { transform: translate3d(3%, 2%, 0) rotate(8deg) scale(1.08); } 100% { transform: translate3d(-2%, 3%, 0) rotate(-6deg) scale(1.03); } }
+
+/* Ticker tape */
+.ticker-tape { position: sticky; top: 78px; z-index: 25; display: flex; align-items: stretch; height: 44px; border-bottom: 1px solid var(--line); background: rgba(7, 10, 18, .82); backdrop-filter: blur(14px); overflow: hidden; }
+.tape-label { display: flex; align-items: center; gap: 6px; padding: 0 16px; font-size: 12px; font-weight: 800; letter-spacing: .14em; color: #042f2e; background: linear-gradient(90deg, #5eead4, #7dd3fc); flex: none; box-shadow: 8px 0 20px -6px rgba(45, 212, 191, .6); z-index: 1; }
+.tape-label svg { animation: live-blink 1.6s ease-in-out infinite; }
+.tape-viewport { position: relative; flex: 1; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); }
+.tape-track { display: flex; width: max-content; height: 100%; animation: tape var(--tape-duration, 120s) linear infinite; }
+.ticker-tape:hover .tape-track, .ticker-tape:focus-within .tape-track { animation-play-state: paused; }
+@keyframes tape { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-50%, 0, 0); } }
+.tape-item { display: flex; align-items: center; gap: 9px; padding: 0 20px; border: 0; border-right: 1px solid var(--line); background: none; color: var(--text); white-space: nowrap; font-size: 14px; transition: background .2s; }
+.tape-item:hover { background: rgba(56, 189, 248, .08); }
+.tape-item strong { font-weight: 700; letter-spacing: .02em; }
+.tape-item .flash-value { font-family: var(--font-num), monospace; font-size: 13.5px; color: var(--text-soft); }
+.tape-change { display: inline-flex; align-items: center; gap: 3px; font-family: var(--font-num), monospace; font-size: 12.5px; font-weight: 600; }
+.tape-change.up { color: var(--positive); } .tape-change.down { color: var(--negative); } .tape-change.muted { color: var(--muted); }
+.tape-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(148, 170, 220, .35); }
+.tape-dot.buy { background: var(--positive); box-shadow: 0 0 8px var(--positive); animation: live-blink 1.4s ease-in-out infinite; }
+.tape-dot.wait { background: var(--warning); }
+@keyframes live-blink { 50% { opacity: .35; } }
+
+/* Price flashes */
+.flash-value { border-radius: 5px; padding: 0 3px; margin: 0 -3px; transition: color .3s; }
+.flash-up { animation: flash-up 1.4s ease-out; }
+.flash-down { animation: flash-down 1.4s ease-out; }
+@keyframes flash-up { 0% { background: rgba(45, 212, 191, .45); color: #ecfeff; } 100% { background: transparent; } }
+@keyframes flash-down { 0% { background: rgba(251, 113, 133, .45); color: #fff1f2; } 100% { background: transparent; } }
+
+/* Sparklines draw in and end with a pulsing dot */
+.sparkline .spark-line { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.6s cubic-bezier(.3, .7, .2, 1) .15s forwards; }
+.sparkline.up .spark-line { stroke: var(--brand-1); filter: drop-shadow(0 0 4px rgba(56, 189, 248, .55)); }
+.sparkline.down .spark-line { stroke: var(--negative); filter: drop-shadow(0 0 4px rgba(251, 113, 133, .45)); }
+.sparkline .spark-end { opacity: 0; animation: appear .3s 1.6s forwards, beacon 2s 1.9s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.sparkline.up .spark-end { fill: var(--brand-1); } .sparkline.down .spark-end { fill: var(--negative); }
+.sparkline { overflow: visible; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes appear { to { opacity: 1; } }
+@keyframes beacon { 50% { transform: scale(1.8); opacity: .5; } }
+
+/* BUY cards: rotating conic border */
+@property --spin { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.opportunity-card:has(.action-badge.buy) { border-color: transparent; background:
+  linear-gradient(var(--panel), var(--panel)) padding-box,
+  conic-gradient(from var(--spin), rgba(45, 212, 191, .9), rgba(56, 189, 248, .2) 25%, rgba(129, 140, 248, .9) 50%, rgba(45, 212, 191, .2) 75%, rgba(45, 212, 191, .9)) border-box;
+  border: 1px solid transparent; animation: spin 6s linear infinite; box-shadow: 0 0 40px -18px rgba(45, 212, 191, .8); }
+@keyframes spin { to { --spin: 360deg; } }
+
+/* Movers + activity row */
+.motion-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; margin: 0 0 28px; }
+.movers-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; padding: 0 18px 18px; }
+.movers-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 8px; }
+.movers-title.up { color: var(--positive); } .movers-title.down { color: var(--negative); }
+.mover { display: grid; grid-template-columns: 26px 54px minmax(0, 1fr) 70px; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; margin-bottom: 4px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--text); text-align: left;
+  opacity: 0; animation: slide-in .5s cubic-bezier(.2, .8, .2, 1) forwards; animation-delay: calc(var(--i) * 80ms); transition: background .2s, border-color .2s; }
+.mover:hover { background: rgba(255, 255, 255, .04); border-color: var(--line); }
+.mover strong { font-size: 13.5px; }
+.mover b { text-align: right; font-family: var(--font-num), monospace; font-size: 13px; }
+.mover.up b { color: var(--positive); } .mover.down b { color: var(--negative); }
+.mover-bar { height: 6px; border-radius: 4px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.mover-bar i { display: block; height: 100%; border-radius: 4px; transform-origin: left; animation: grow 1s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(var(--i) * 80ms + .2s); transition: width .8s; }
+.mover.up .mover-bar i { background: linear-gradient(90deg, rgba(45, 212, 191, .35), var(--positive)); box-shadow: 0 0 10px rgba(45, 212, 191, .5); }
+.mover.down .mover-bar i { background: linear-gradient(90deg, rgba(251, 113, 133, .35), var(--negative)); box-shadow: 0 0 10px rgba(251, 113, 133, .45); }
+@keyframes slide-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+@keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.feed-panel { display: flex; flex-direction: column; }
+.feed-viewport { position: relative; height: 296px; overflow: hidden; margin: 0 18px 18px; mask-image: linear-gradient(180deg, transparent, #000 12%, #000 88%, transparent); }
+.feed-track { list-style: none; margin: 0; padding: 0; animation: feed var(--feed-duration, 40s) linear infinite; }
+.feed-panel:hover .feed-track { animation-play-state: paused; }
+@keyframes feed { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, -50%, 0); } }
+.feed-item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.feed-item > i { flex: none; width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.feed-item.good > i { background: var(--positive); box-shadow: 0 0 8px var(--positive); }
+.feed-item.bad > i { background: var(--negative); box-shadow: 0 0 8px var(--negative); }
+.feed-item strong { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; letter-spacing: .04em; }
+.feed-item em { font-style: normal; font-size: 12px; padding: 1px 8px; border-radius: 999px; color: var(--accent); background: var(--accent-soft); }
+.feed-item p { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+/* Hero sheen */
+.market-pulse::after { content: ""; position: absolute; top: 0; bottom: 0; width: 40%; left: -50%; pointer-events: none; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .05), transparent); animation: sheen 7s ease-in-out 1.5s infinite; }
+@keyframes sheen { 0% { left: -50%; } 45%, 100% { left: 130%; } }
+.live-pill i, .blue-dot { animation: live-blink 1.8s ease-in-out infinite; }
+
+@media (max-width: 1100px) { .motion-row { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 800px) { .ticker-tape { top: 0; position: relative; } }
+@media (max-width: 580px) { .movers-grid { grid-template-columns: minmax(0, 1fr); } .tape-label { padding: 0 10px; } .tape-item { padding: 0 14px; } }
+@media (prefers-reduced-motion: reduce) {
+  body::after, .tape-track, .feed-track, .opportunity-card:has(.action-badge.buy), .market-pulse::after, .live-pill i, .blue-dot, .tape-dot.buy, .tape-label svg { animation: none !important; }
+  .tape-viewport { overflow-x: auto; } .feed-viewport { overflow-y: auto; }
+  .sparkline .spark-line { stroke-dashoffset: 0; animation: none; } .sparkline .spark-end { opacity: 1; animation: none; }
+  .mover, .mover-bar i { animation: none; opacity: 1; }
+}
