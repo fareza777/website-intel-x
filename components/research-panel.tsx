@@ -6,6 +6,7 @@ import { cn, dollars, money, percent, price } from "@/lib/utils";
 import { positionSize } from "@/lib/market/risk";
 import type { MarketSetup, Timeframe } from "@/lib/types";
 import { QualificationSummary } from "./market-eligibility";
+import { EdgeCard, RiskLadder } from "./edge-visuals";
 
 export function ActionBadge({ action }: { action: string }) { return <span className={cn("action-badge", action === "BUY" ? "buy" : action === "WAIT" ? "wait" : "no-trade")}>{action === "BUY" ? <ArrowUpRight size={13} /> : action === "WAIT" ? <Clock3 size={13} /> : <span className="badge-dot" />}{action === "BUY" ? "BUY SETUP" : action}</span>; }
 export function CoinIcon({ asset, small = false }: { asset: string; small?: boolean }) {
@@ -17,7 +18,7 @@ export function ResearchPanel({ setup, capital, risk, onCapital, onRisk, onSimul
   const [sizing, setSizing] = useState(false);
   const plan = setup.plan;
   let size: ReturnType<typeof positionSize> | null = null;
-  try { if (plan && capital >= 100 && capital <= 1e9 && risk >= .1 && risk <= 5) size = positionSize(plan, capital, risk); } catch { /* Validated inputs show no size until valid. */ }
+  try { if (plan && capital >= 100 && capital <= 1e9 && risk >= .1 && risk <= 5) size = positionSize(plan, capital, risk * (setup.sizing?.riskMultiplier ?? 1)); } catch { /* Validated inputs show no size until valid. */ }
   async function copy() {
     if (!plan) return;
     try { await navigator.clipboard.writeText(`${setup.symbol} | ${setup.action} | score ${setup.score}/100 (not probability)\nEntry ${plan.entry} | zone ${plan.entryZone.join(" – ")}\nSL ${plan.stopLoss} | TP ${plan.targets.map(t => t.price).join(" / ")}\nExpires ${setup.expiresAt}\nSpot research only. Fees ${plan.feeBps}bps + slippage ${plan.slippageBps}bps per side.`); notify("Research plan copied."); }
@@ -29,13 +30,15 @@ export function ResearchPanel({ setup, capital, risk, onCapital, onRisk, onSimul
     <div className="quality-row"><span>Setup quality <Info size={14} aria-label="Rule agreement, not win probability" /></span><strong>{setup.score}<small> / 100</small></strong></div>
     <div className="quality-track"><span style={{ width: `${setup.score}%` }} /></div>
     <p className="score-note">Technical agreement. Not a win probability.</p>
+    <EdgeCard setup={setup} />
     <QualificationSummary setup={setup} capital={capital} risk={risk} onGuide={onGuide} />
     {plan ? <>
       <div className="entry-block"><span>Recommended entry</span><div><strong>{dollars(plan.entry)}</strong><button className="icon-button" title="Copy research plan" aria-label="Copy research plan" onClick={copy}><Copy size={17} /></button></div><p>Zone <b>{price(plan.entryZone[0])} – {price(plan.entryZone[1])}</b></p></div>
       <div className="level-row stop"><span><i /> Stop loss</span><strong>{dollars(plan.stopLoss)}</strong><span title="Estimated net return after planned fees and slippage">−{plan.riskPct.toFixed(2)}%</span></div>
       <div className="target-levels">{plan.targets.map((target, i) => <div className="level-row" key={i}><span><i /> Take profit {i + 1}</span><strong>{dollars(target.price)}</strong><span title="Estimated net return after planned fees and slippage">+{target.gainPct.toFixed(2)}%</span></div>)}</div>
+      <RiskLadder plan={plan} />
       <div className="risk-reward"><span>Net risk / reward</span><strong>1 : {plan.targets[1]?.rr.toFixed(2) || "—"}<small>at TP2</small></strong></div>
-      <button className="sizing-toggle" aria-expanded={sizing} onClick={() => setSizing(!sizing)}><SlidersHorizontal size={16} /> Research sizing estimate <span>{risk}% risk</span>{sizing ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
+      <button className="sizing-toggle" aria-expanded={sizing} onClick={() => setSizing(!sizing)}><SlidersHorizontal size={16} /> Research sizing estimate <span>{+(risk * (setup.sizing?.riskMultiplier ?? 1)).toFixed(2)}% risk</span>{sizing ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
       {sizing && <div className="sizing-fields"><label>Capital (USDT)<input type="number" min="100" max="1000000000" value={capital} onChange={e => onCapital(Number(e.target.value))} /></label><label>Risk (%)<input type="number" min="0.1" max="5" step="0.1" value={risk} onChange={e => onRisk(Number(e.target.value))} /></label><p>{size?.quantity ? `${price(size.quantity)} ${setup.baseAsset} · ${money(size.notional)} position · ${money(size.maxLoss)} planned loss including costs` : size ? "This balance and risk do not meet the exchange minimum order size." : "Enter valid capital and risk values."}</p><p>Virtual trade size uses your portfolio starting capital, available cash, and exchange lot rules.</p></div>}
       <Button className="simulate-button" disabled={disabled || setup.action !== "BUY" || !virtualPreview} onClick={onSimulate}><ShieldCheck />{setup.action === "BUY" ? "Take virtual trade" : "Waiting for confirmation"}<ArrowUpRight /></Button>
       {virtualPreview && <p className="execution-note">Virtual size: {price(virtualPreview.quantity)} {setup.baseAsset} · {money(virtualPreview.reserved)} cash reserved · {money(virtualPreview.maxLoss)} planned loss including costs.</p>}

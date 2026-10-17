@@ -6,8 +6,9 @@ import { downloadJson } from "@/lib/download";
 import { Button } from "./ui/button";
 import type { ScannerValidationReport } from "@/lib/research/types";
 import { ScannerValidation } from "./scanner-validation";
+import { ModelCalibration } from "./edge-visuals";
 export function StrategyView({ report, validation }: { report: AnalyticsReport | null; validation: ScannerValidationReport | null }) {
-  return <div className="view-stack"><ScannerValidation report={validation} /><BaselineComparison report={report} /></div>;
+  return <div className="view-stack"><ScannerValidation report={validation} /><ModelCalibration /><BaselineComparison report={report} /></div>;
 }
 function BaselineComparison({ report }: { report: AnalyticsReport | null }) {
   if (!report) return <section className="panel"><div className="empty-state large"><FlaskConical size={42} /><h2>Evidence before conviction.</h2><p>No historical evaluation has been published yet. The Python runner downloads real Binance candles and compares chronological out-of-sample strategy results.</p><code>python -m analytics.run --symbol BTCUSDT --output data/analytics.json</code><p>The scheduled analytics workflow publishes its report here. No sample backtest results are displayed.</p></div></section>;

@@ -26,6 +26,9 @@ const labels: Record<string, [string, string]> = {
   momentum: ["Positive MACD momentum", "The MACD histogram must be positive on the decision and required confirmation timeframes."],
   participation: ["Supporting volume and buying", "Relative volume must be at least 1.1× the previous average, with taker-buy share of at least 52% over the strategy window."],
   score: ["Sufficient technical agreement", "The score measures rule alignment. BUY still requires all safety and confirmation checks."],
+  regime: ["Market is not risk-off", "New long plans pause when BTC's higher-timeframe trend is bearish and fewer than 30% of scanned markets close above their EMA50."],
+  edge: ["Positive calibrated edge", "A model trained only on earlier data estimates the win probability and expected R after costs. It qualifies entries only after passing an out-of-sample holdout."],
+  calibration: ["Validated 15M model", "15M is the noisiest horizon and lost money under the previous rules, so it publishes BUY plans only with a validated model."],
 };
 function decisionFrames(timeframe: Timeframe): Timeframe[] { return timeframe === "15m" ? ["15m", "1h", "4h"] : timeframe === "1h" ? ["1h", "4h", "1d"] : timeframe === "4h" ? ["4h", "1d"] : ["1d"]; }
 export function explainCheck(check: QualificationCheck, setup: MarketSetup) {
@@ -45,7 +48,9 @@ export function explainCheck(check: QualificationCheck, setup: MarketSetup) {
   if (check.id === "rsi" && base) measured = `${timeframe.toUpperCase()} RSI ${base.rsi.toFixed(1)} · ${check.requiredFor === "context" ? "preferred range" : "BUY range"} 45–70.`;
   if (check.id === "volatility" && base) measured = `${timeframe.toUpperCase()} ATR ${(base.atr / setup.price * 100).toFixed(2)}% of price · policy limit ${setup.policy?.maximumAtrPct ?? 6}%.`;
   if (check.id === "extension" && base) measured = `RSI ${base.rsi.toFixed(1)} · distance from EMA21 ${base.atr > 0 ? ((setup.price - base.ema21) / base.atr).toFixed(2) : "—"} ATR.`;
-  if (check.id === "score") measured = `${setup.score}/100 · WAIT minimum 50; base BUY threshold 78.`;
+  if (check.id === "score") measured = `${setup.score}/100 · WAIT minimum 50; ${check.requiredFor === "context" ? "the validated edge replaces the 78 floor." : "base BUY threshold 78."}`;
+  if (check.id === "edge" && setup.edge) measured = `Win estimate ${(setup.edge.probability * 100).toFixed(1)}% · expected ${setup.edge.expectedR.toFixed(2)}R · minimum ${setup.edge.minimumEdgeR.toFixed(2)}R.`;
+  if (check.id === "regime" && setup.market) measured = `BTC ${setup.market.btcTrend} · breadth ${setup.market.breadth === null ? "unavailable" : `${Math.round(setup.market.breadth * 100)}%`}.`;
   if (check.id === "liquidity") measured = `24h volume ${(setup.quoteVolume24h / 1e6).toFixed(2)} million USDT · minimum 5 million.`;
   if (check.id === "participation" && setup.volume) measured = `Relative volume ${setup.volume.relativeVolume.toFixed(2)}× · taker-buy ${(setup.volume.buyPressure * 100).toFixed(1)}%.`;
   if (check.id === "freshness") measured = `Decision candle ${new Date(setup.asOf).toLocaleString("en-US")}. Check status is frozen at scan time.`;

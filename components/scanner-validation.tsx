@@ -7,13 +7,14 @@ import { STRATEGY_VERSION } from "@/lib/market/policy";
 import { downloadJson } from "@/lib/download";
 import { cn, dollars, percent } from "@/lib/utils";
 import { Button } from "./ui/button";
+import { HorizonSummaries } from "./edge-visuals";
 
 const frames: Timeframe[] = ["15m", "1h", "4h", "1d"];
 const date = (value: string) => new Date(value).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Jakarta" });
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const evidenceLabel = (row: ScannerValidationRow) => row.evidence === "insufficient" ? "Limited sample" : row.evidence === "unfavorable" ? "Unfavorable results" : "Positive in this sample";
 export function ScannerValidation({ report }: { report: ScannerValidationReport | null }) {
-  const [frame, setFrame] = useState<Timeframe>("15m");
+  const [frame, setFrame] = useState<Timeframe>("1h");
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(timer); }, []);
@@ -26,6 +27,7 @@ export function ScannerValidation({ report }: { report: ScannerValidationReport 
     <div className="evidence-heading"><div className="min-w-0"><span className="eyebrow">ACTUAL SCANNER · {report.strategyVersion}</span><h2>Evidence before conviction.</h2><p>Replay of the same recommendation rules on Binance history. {date(report.start)} — {date(report.end)}.</p></div><Button variant="outline" onClick={() => downloadJson("cryptointel-scanner-replay.json", report)}><ArrowDownToLine size={17} />Export evidence</Button></div>
     <div className="evidence-verdict"><ShieldAlert size={24} /><div className="min-w-0"><strong>{report.rows.some(row => row.evidence === "unfavorable") ? "Some historical results are unfavorable" : report.rows.some(row => row.evidence === "insufficient") ? "Performance evidence remains limited" : "Historical results need forward testing"}</strong><p>{completed} completed trades across separate accounts. Standard indicators or popular repositories do not establish profitability. Setup quality is not a win probability.</p></div></div>
     <div className="evidence-assumptions"><span><b>{money(report.capitalPerAccount)}</b> per pair × horizon account</span><span><b>{report.initialCapitalRiskPct}%</b> of initial capital at risk</span><span><b>{(report.feeBps / 100).toFixed(2)}% + {(report.slippageBps / 100).toFixed(2)}%</b> fee + slippage / side</span><span><b>Hourly, :{String(report.assumedPublicationMinute).padStart(2, "0")}</b> assumed publication</span></div>
+    <HorizonSummaries report={report} />
     <div className="evidence-controls"><div className="horizon-switch" aria-label="Replay timeframe">{frames.map(tf => <button key={tf} aria-pressed={frame === tf} className={cn(frame === tf && "active")} onClick={() => setFrame(tf)}>{tf.toUpperCase()}</button>)}</div><span><Database size={15} />Updated {new Date(report.generatedAt).toLocaleString("en-US", { timeZone: "Asia/Jakarta" })} WIB</span></div>
     {aged && <p className="warning-note">This report is over 48 hours old. It is the latest available historical result and has not been recalculated.</p>}
     {report.strategyVersion !== STRATEGY_VERSION && <p className="warning-note">This report uses {report.strategyVersion}. The current scanner uses {STRATEGY_VERSION}; earlier results do not establish the performance of the new rules. An updated replay is pending.</p>}
@@ -37,7 +39,7 @@ export function ScannerValidation({ report }: { report: ScannerValidationReport 
       {selected.filled > 0 ? <EvidenceEquity row={selected} /> : <p className="evidence-no-trades">No entries filled. A zero return means the account remained in cash; it does not establish strategy safety or profitability.</p>}
       <div className="evidence-windows">{selected.windows.map((window, i) => <div key={window.start}><span>Period {i + 1} · {window.completed} closed trades</span><strong className={window.netReturnPct < 0 ? "negative" : ""}>{percent(window.netReturnPct)}</strong><small>{date(window.start)} — {date(window.end)}</small></div>)}</div>
       <p className="panel-note">Three consecutive periods use a continuing account. These descriptive splits are not three independent, unseen out-of-sample tests.</p>
-      <details className="evidence-audit"><summary>Audit {selected.completed} closed trades & calculation assumptions</summary><p>Trade expectancy: <b>{selected.expectancyPct === null ? "—" : percent(selected.expectancyPct)}</b>. Fees and slippage are included. TP1/2 are milestones with no partial profit taking.</p>
+      <details className="evidence-audit"><summary>Audit {selected.completed} closed trades & calculation assumptions</summary><p>Trade expectancy: <b>{selected.expectancyPct === null ? "—" : percent(selected.expectancyPct)}</b>. Fees and slippage are included. {report.strategyVersion === "cx-spot-5" || report.summaries ? "Managed plans sell half at TP1 and protect the remainder with a breakeven/ATR trailing stop; the exit fill is quantity-weighted." : "TP1/2 are milestones with no partial profit taking."}</p>
         {selected.trades.length > 0 && <div className="table-scroll"><table className="evidence-table"><thead><tr><th>Entry · WIB</th><th>Exit · WIB</th><th>Entry fill</th><th>Exit fill</th><th>Net P/L</th><th>Status</th></tr></thead><tbody>{selected.trades.map(trade => <tr key={trade.id}><td>{new Date(trade.enteredAt).toLocaleString("en-US", { timeZone: "Asia/Jakarta" })}</td><td>{new Date(trade.exitAt).toLocaleString("en-US", { timeZone: "Asia/Jakarta" })}</td><td>{dollars(trade.entryFill)}</td><td>{dollars(trade.exitFill)}</td><td className={trade.pnl < 0 ? "negative" : ""}>{money(trade.pnl)} · {percent(trade.returnPct)}</td><td>{trade.status}</td></tr>)}</tbody></table></div>}
         <p>{report.closedWindow} closed candles per frame. 15M uses 15-minute execution candles; other horizons use hourly candles. Actual GitHub publication may be later than the assumed :{String(report.assumedPublicationMinute).padStart(2, "0")}.</p>
         <p>Historical 24-hour tickers are reconstructed from closed 1H candles. The {report.symbols.map(symbol => symbol.replace(/USDT$/, "")).join("/")} universe and current exchange filters limit generalization. OHLC fills are simulations without tick-level execution verification.</p>
