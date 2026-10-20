@@ -4,7 +4,10 @@ export const SCAN_INTERVAL_HOURS = 1;
 export const SCAN_CADENCE = SCAN_INTERVAL_HOURS === 1 ? "hour" : `${SCAN_INTERVAL_HOURS} hours`;
 export const SCAN_MINUTE = 17;
 export const QUOTE_REFRESH_MS = 30_000;
-export const CANDLE_REFRESH_MS = 60_000;
+// Closed candles cannot change until the current interval finishes. Polling every
+// five minutes is enough for all supported horizons and avoids repeated origin
+// transfers while a chart remains open.
+export const CANDLE_REFRESH_MS = 300_000;
 
 /** Missing or aged quotes are never replaced with a research candle price. */
 export function freshQuotePrice(quote: SpotQuote | undefined, symbol: string, now: number): number | null {

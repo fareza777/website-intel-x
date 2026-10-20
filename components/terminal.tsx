@@ -30,7 +30,14 @@ import type { GuideTopic, WorkspacePage } from "@/lib/guide";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 
 type View = WorkspacePage;
-interface TerminalData { snapshot: MarketSnapshot; signals: TrackedSignal[]; alerts: SignalEvent[]; analytics: AnalyticsReport | null; scannerValidation?: import("@/lib/research/types").ScannerValidationReport | null; persistence: string; preview: boolean; stale: boolean }
+interface TerminalData { snapshot: MarketSnapshot; alerts: SignalEvent[]; publishedAt?: string; persistence: string; preview: boolean; stale: boolean }
+interface ResearchData {
+  historyPublication: string | null;
+  signals: TrackedSignal[];
+  strategyPublication: string | null;
+  analytics: AnalyticsReport | null;
+  scannerValidation: import("@/lib/research/types").ScannerValidationReport | null;
+}
 interface Preferences { capital: number; risk: number; universe: number; useWatchlist: boolean; largeText: boolean }
 const defaults: Preferences = { capital: 10000, risk: 1, universe: 50, useWatchlist: false, largeText: false };
 const navigation: { id: View; label: string; icon: ElementType; group?: string }[] = [
@@ -65,6 +72,10 @@ function readLocal<T>(key: string, fallback: T): T { try { const value = localSt
 export function Terminal() {
   const [view, setView] = useState<View>("overview");
   const [data, setData] = useState<TerminalData | null>(null);
+  const [research, setResearch] = useState<ResearchData>({ historyPublication: null, signals: [], strategyPublication: null, analytics: null, scannerValidation: null });
+  const [researchBusy, setResearchBusy] = useState(false);
+  const [researchError, setResearchError] = useState("");
+  const [researchRetry, setResearchRetry] = useState(0);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [symbol, setSymbol] = useState("BTCUSDT");
@@ -96,6 +107,7 @@ export function Terminal() {
   const initializedAlerts = useRef(false);
   const previewRef = useRef(false);
   const paperGeneration = useRef(0);
+  const researchRequests = useRef(new Set<string>());
   const notify = useCallback((message: string) => setToast(message), []);
   const setups = data?.snapshot.timeframes?.[timeframe] || (timeframe === "1h" ? data?.snapshot.setups || [] : []);
   const marketView = ["overview", "radar", "workspace", "liquidity", "volume"].includes(view);
@@ -108,7 +120,7 @@ export function Terminal() {
   const unread = data?.alerts.filter(a => !seen.includes(a.id)).length || 0;
 
   const loadPublished = useCallback((force = false) => {
-    return fetch("/api/market", { cache: "no-store" }).then(async response => {
+    return fetch("/api/market", { cache: "default" }).then(async response => {
       if (!response.ok) throw new Error("The market service is unavailable. Please retry.");
       return await response.json() as TerminalData;
     }).then(result => {
@@ -118,13 +130,34 @@ export function Terminal() {
   }, []);
   useEffect(() => {
     void loadPublished();
-    const interval = setInterval(() => void loadPublished(), 60_000);
+    const interval = setInterval(() => void loadPublished(), 300_000);
     const onFocus = () => void loadPublished();
     const onVisible = () => { if (document.visibilityState === "visible") void loadPublished(); };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
     return () => { clearInterval(interval); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVisible); };
   }, [loadPublished]);
+  useEffect(() => {
+    if (!data) return;
+    const scope = view === "autopsy" ? "history" : view === "strategy" || view === "rotation" ? "strategy" : null;
+    if (!scope) return;
+    const publication = data.publishedAt || data.snapshot.generatedAt;
+    const requestKey = `${scope}:${publication}`;
+    if (researchRequests.current.has(requestKey)) return;
+    researchRequests.current.add(requestKey);
+    setResearchBusy(true); setResearchError("");
+    fetch(`/api/research?scope=${scope}`, { cache: "default" }).then(async response => {
+      const result = await response.json() as { signals?: TrackedSignal[]; analytics?: AnalyticsReport | null; scannerValidation?: import("@/lib/research/types").ScannerValidationReport | null; publishedAt?: string; error?: string };
+      if (!response.ok) throw new Error(result.error || "Research history is unavailable.");
+      const resultPublication = result.publishedAt || publication;
+      setResearch(current => scope === "history"
+        ? { ...current, historyPublication: resultPublication, signals: result.signals || [] }
+        : { ...current, strategyPublication: resultPublication, analytics: result.analytics ?? null, scannerValidation: result.scannerValidation ?? null });
+    }).catch(error => {
+      researchRequests.current.delete(requestKey);
+      setResearchError(error instanceof Error ? error.message : "Research history is unavailable.");
+    }).finally(() => setResearchBusy(false));
+  }, [data, view, researchRetry]);
   useEffect(() => {
     const interval = setInterval(() => setClock(Date.now()), 15_000);
     return () => clearInterval(interval);
@@ -177,7 +210,7 @@ export function Terminal() {
       const result = await response.json();
       if (!response.ok && !result.snapshot) throw new Error(result.error || "The scan could not complete.");
       previewRef.current = true;
-      setData(current => ({ snapshot: result.snapshot, signals: current?.signals || [], alerts: current?.alerts || [], analytics: current?.analytics || null, scannerValidation: current?.scannerValidation ?? null, persistence: current?.persistence || "unavailable", preview: true, stale: false }));
+      setData(current => ({ snapshot: result.snapshot, alerts: current?.alerts || [], publishedAt: current?.publishedAt || result.snapshot.generatedAt, persistence: current?.persistence || "unavailable", preview: true, stale: false }));
       setRefresh(v => v + 1);
       notify(result.snapshot.status === "unavailable" ? "Exchange data is unavailable. No signals were generated." : `${result.snapshot.scanned} assets scanned. Live preview ready.`);
     } catch (e) { notify(e instanceof Error ? e.message : "Scan failed."); }
@@ -199,7 +232,8 @@ export function Terminal() {
       try {
         const duration = executionIntervalMs(p.signal);
         const start = p.signal.lastEvaluatedTime ? p.signal.lastEvaluatedTime + duration : Math.ceil(Date.parse(p.signal.publishedAt) / duration) * duration;
-        const response = await fetch(`/api/candles?symbol=${p.signal.setup.symbol}&interval=${executionInterval(p.signal)}&limit=1000&startTime=${start}`);
+        const limit = p.signal.lastEvaluatedTime ? Math.min(1000, Math.max(50, Math.ceil((Date.now() - start) / duration) + 2)) : 1000;
+        const response = await fetch(`/api/candles?symbol=${p.signal.setup.symbol}&interval=${executionInterval(p.signal)}&limit=${limit}&startTime=${start}`);
         const result = await response.json(); if (!response.ok) throw new Error(result.error);
         const updated = advanceSignal(p.signal, result.candles, Date.now());
         updates.push(updated);
@@ -213,7 +247,7 @@ export function Terminal() {
   }, [paper, notify]);
   useEffect(() => {
     if (paperBusy || !paper.positions.some(p => !p.settled)) return;
-    const interval = setInterval(() => void updatePaper(true), 60_000);
+    const interval = setInterval(() => void updatePaper(true), 300_000);
     return () => clearInterval(interval);
   }, [paperBusy, paper.positions, updatePaper]);
   useEffect(() => {
@@ -298,7 +332,7 @@ export function Terminal() {
       {data && marketView && horizonAvailable && <TickerTape setups={setups} quotes={quotes} clock={clock} onSelect={selectAsset} />}<main>
         <div className="page-heading"><div><div className="eyebrow"><span className="blue-dot" />CRYPTOSCANORA / MARKET INTELLIGENCE</div><h1>{title.title}<span className="heading-dot">.</span></h1><p>{title.subtitle}</p></div><div className="page-actions"><Button variant="outline" onClick={() => openGuide()}><CircleHelp />Page guide</Button><Button variant="outline" onClick={() => { setWatchText(watchlist.map(s => s.replace(/USDT$/, "")).join(", ")); setWatchlistOpen(true); }}><Star />Watchlist</Button><Button onClick={scan} disabled={busy}><RefreshCw className={busy ? "spin" : ""} />{busy ? "Scanning markets…" : "Scan markets"}</Button></div></div>
         <div className="scan-meta"><span><Clock3 size={15} />{data ? `Last recommendation scan ${relativeTime(data.snapshot.generatedAt)}` : "Connecting to real market data…"}</span><span><Globe2 size={15} />Binance public spot</span><span className="scheduled"><i className="blue-dot" />Every {SCAN_CADENCE}</span><span title="Nominal UTC schedule. GitHub Actions can start later during busy periods."><Clock3 size={15} />Next scheduled {hydrated ? new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", timeZoneName: "short" }).format(nextScheduledScan(clock)) : "…"}</span>{data?.preview && <button onClick={() => void loadPublished(true)}>Manual preview · return to scheduled scan <ArrowRight size={14} /></button>}</div>
-        {data && marketView && <div className="update-policy" aria-label="Market update status"><span className={selectedLivePrice === null ? "unavailable" : ""}><i />{selectedLivePrice === null ? "Live quote unavailable" : "Live prices · every 30s"}</span><span>Closed candles · every minute</span><span>Recommendations · every {SCAN_INTERVAL_HOURS}h</span></div>}
+        {data && marketView && <div className="update-policy" aria-label="Market update status"><span className={selectedLivePrice === null ? "unavailable" : ""}><i />{selectedLivePrice === null ? "Live quote unavailable" : "Live prices · every 30s"}</span><span>Closed candles · every 5 minutes</span><span>Recommendations · every {SCAN_INTERVAL_HOURS}h</span></div>}
         {(loadError || stale || data?.snapshot.status === "partial") && <div className="status-banner"><Activity size={19} /><span>{loadError || (stale ? "Market data is stale or unavailable. Trade simulation is disabled until fresh data arrives." : `${data?.snapshot.errors.length} ${data?.snapshot.errors.length === 1 ? "market" : "markets"} could not be analyzed. Only verified data is displayed.`)}</span><button onClick={() => void loadPublished(true)}>Refresh</button></div>}
         {data && marketView && <div className="horizon-bar"><div><span>RESEARCH HORIZON</span><div className="segment">{(["15m", "1h", "4h", "1d"] as Timeframe[]).map(tf => <button key={tf} className={timeframe === tf ? "active" : ""} aria-label={`${tf.toUpperCase()} research horizon`} onClick={() => setTimeframe(tf)}>{tf.toUpperCase()}</button>)}</div></div><p>Independent scores, entry levels, targets, and expiry for each horizon.</p></div>}
         {data && horizonAvailable && view === "overview" && <MarketPulse setups={setups} snapshot={data.snapshot} timeframe={timeframe} onRotation={() => navigate("rotation")} />}
@@ -315,12 +349,12 @@ export function Terminal() {
           {(view === "overview" || view === "radar") && <section className="panel radar-panel"><div className="panel-heading"><div><h2>{view === "overview" ? "Market watch" : "The opportunity universe"}</h2><p>{setups.length} assets · {data.snapshot.universeRanking === "7d-average" ? "universe = top markets by 7-day average volume" : data.snapshot.universeRanking === "watchlist" ? "your watchlist" : "universe = top markets by 24h volume"} · ranked by eligibility and edge</p></div><button className={cn("watchlist-filter", onlyWatchlist && "active")} onClick={() => setOnlyWatchlist(!onlyWatchlist)}><Star size={17} fill={onlyWatchlist ? "currentColor" : "none"} />My watchlist</button></div><div className="radar-filters"><div className="local-search"><Search size={17} /><input aria-label="Filter assets" placeholder="Filter by asset or name…" value={search} onChange={e => setSearch(e.target.value)} /></div><label><ListFilter size={16} /><select aria-label="Filter signal action" value={actionFilter} onChange={e => setActionFilter(e.target.value)}><option value="all">All signals</option><option value="BUY">BUY setups</option><option value="WAIT">WAIT setups</option><option value="NO TRADE">No trade</option></select></label><label><select aria-label="Minimum setup score" value={minScore} onChange={e => setMinScore(Number(e.target.value))}><option value="0">Any quality</option><option value="60">Quality 60+</option><option value="70">Quality 70+</option><option value="80">Quality 80+</option></select></label><label><ArrowDownUp size={16} /><select aria-label="Sort markets" value={sort} onChange={e => setSort(e.target.value)}><option value="opportunity">BUY / WAIT first</option><option value="score">Technical score</option><option value="volume">24h volume</option><option value="change">24h change</option></select></label></div>{filtered.length ? <div className="table-scroll"><table className="data-table market-table"><thead><tr><th>Asset</th><th>Live price</th><th>Live 24h change</th><th>Live 24h volume</th><th>{timeframe.toUpperCase()} research history</th><th>Setup quality</th><th>Edge</th><th>Horizons</th><th>Signal</th><th /></tr></thead><tbody>{filtered.slice(0, view === "overview" ? 10 : 50).map(s => <tr key={s.id}><td><div className="table-asset"><button className={cn("star-button", watchlist.includes(s.symbol) && "saved")} aria-label={`${watchlist.includes(s.symbol) ? "Remove" : "Add"} ${s.baseAsset} ${watchlist.includes(s.symbol) ? "from" : "to"} watchlist`} onClick={() => toggleWatch(s.symbol)}><Star size={16} fill={watchlist.includes(s.symbol) ? "currentColor" : "none"} /></button><CoinIcon asset={s.baseAsset} small /><button className="asset-name" onClick={() => selectAsset(s.symbol)}><strong>{s.baseAsset}<span>USDT</span></strong><small>{s.name}</small></button></div></td><td className="numeric live-market-price" data-testid={`radar-price-${s.symbol}`}><strong><FlashValue value={freshQuotePrice(quotes[s.symbol], s.symbol, clock)}>{dollars(freshQuotePrice(quotes[s.symbol], s.symbol, clock))}</FlashValue></strong><small>{quoteTime(s.symbol)}</small></td><td className="numeric"><Change value={statsFor(s)?.change24h} /></td><td className="numeric muted">{dollars(statsFor(s)?.quoteVolume24h, true)}</td><td><Sparkline values={s.sparkline} negative={s.change24h < 0} /></td><td><div className="table-quality"><div><i style={{ width: `${s.score}%` }} /></div><strong>{s.score}<span>/100</span></strong></div></td><td className="numeric"><EdgeCell setup={s} /></td><td><HorizonDots symbol={s.symbol} timeframes={data.snapshot.timeframes} /></td><td><ActionBadge action={s.action} /></td><td><button className="table-open" aria-label={`Open ${s.baseAsset} trade workspace`} onClick={() => selectAsset(s.symbol)}><ArrowUpRight size={19} /></button></td></tr>)}</tbody></table></div> : <div className="empty-state"><Search size={32} /><h3>{setups.length ? "No assets match these filters" : "No verified market data available"}</h3><p>{setups.length ? "Try a different quality threshold or remove a filter." : "The exchange must return valid closed candles before research can be generated."}</p><Button variant="outline" onClick={() => { setSearch(""); setMinScore(0); setActionFilter("all"); setOnlyWatchlist(false); }}>Reset filters</Button></div>}<div className="table-footer"><span>Prices, 24h changes and volume refresh together every 30s. Research history and scores remain frozen at the scan. Unavailable quotes show —; quality is rule agreement, not win probability.</span>{view === "overview" && <button className="text-button" onClick={() => navigate("radar")}>View full radar<ArrowRight size={16} /></button>}</div></section>}
           {view === "liquidity" && <LiquidityView setups={setups} onSelect={selectAsset} />}
           {view === "volume" && selected && <><div className="view-asset-picker"><label>Analyzing<select value={selected.symbol} onChange={e => setSymbol(e.target.value)}>{setups.map(s => <option key={s.id} value={s.symbol}>{s.baseAsset} / USDT</option>)}</select></label></div><VolumeView setup={selected} key={selected.symbol} /></>}
-          {view === "autopsy" && <HistoryView signals={data.signals} />}
-          {view === "rotation" && <RotationView signal={data.snapshot.rotation} outOfSample={data.scannerValidation?.rotation ?? null} />}
-          {view === "strategy" && <StrategyView report={data.analytics} validation={data.scannerValidation ?? null} />}
+          {view === "autopsy" && (research.historyPublication ? <HistoryView signals={research.signals} /> : <section className="panel"><div className="empty-state large"><Crosshair size={35} /><h2>{researchBusy ? "Loading the signal ledger…" : "Signal history is unavailable"}</h2><p>{researchBusy ? "The complete immutable record is loaded only when this page is opened." : researchError || "Try refreshing the terminal to load the published record."}</p><Button variant="outline" onClick={() => { researchRequests.current.clear(); setResearchError(""); setResearchRetry(v => v + 1); }}>Retry history</Button></div></section>)}
+          {view === "rotation" && (research.strategyPublication ? <RotationView signal={data.snapshot.rotation} outOfSample={research.scannerValidation?.rotation ?? null} /> : <section className="panel"><div className="empty-state large"><Orbit size={35} /><h2>{researchBusy ? "Loading rotation validation…" : "Rotation validation is unavailable"}</h2><p>{researchBusy ? "Out-of-sample validation is loaded only when this page is opened." : researchError || "Try refreshing the terminal to load the published report."}</p><Button variant="outline" onClick={() => { researchRequests.current.clear(); setResearchError(""); setResearchRetry(v => v + 1); }}>Retry validation</Button></div></section>)}
+          {view === "strategy" && (research.strategyPublication ? <StrategyView report={research.analytics} validation={research.scannerValidation} /> : <section className="panel"><div className="empty-state large"><FlaskConical size={35} /><h2>{researchBusy ? "Loading strategy lab…" : "Strategy report is unavailable"}</h2><p>{researchBusy ? "Backtest and scanner validation are loaded only when this page is opened." : researchError || "Try refreshing the terminal to load the published report."}</p><Button variant="outline" onClick={() => { researchRequests.current.clear(); setResearchError(""); setResearchRetry(v => v + 1); }}>Retry report</Button></div></section>)}
           {view === "paper" && <PaperView key={paper.initialCapital} account={paper} quotes={quotes} update={() => void updatePaper()} busy={paperBusy || !!paperAction} importAccount={importPortfolio} onManage={managePaper} onExplore={() => navigate("radar")} onCapital={setStartingCapital} onJournal={(index, value) => setPaper(current => ({ ...current, positions: current.positions.map((p, i) => i === index ? { ...p, journal: value } : p) }))} />}
           {view === "alerts" && <AlertsView alerts={data.alerts} seen={seen} onRead={readAlerts} onEnable={enableNotifications} enabled={notifications} />}
-          {view === "settings" && <section className="panel settings-panel"><div className="panel-heading"><h2>Research preferences</h2><span className="micro-tag">SAVED ON THIS DEVICE</span></div><div className="settings-fields"><label>Research capital (USDT)<input type="number" value={preferences.capital} min="100" max="1000000000" onChange={e => setPreferences(p => ({ ...p, capital: Number(e.target.value) }))} /><small>Used for research position sizing. Virtual portfolio cash is tracked separately.</small></label><label>Risk per trade (%)<input type="number" value={preferences.risk} min="0.1" max="5" step="0.1" onChange={e => setPreferences(p => ({ ...p, risk: Number(e.target.value) }))} /><small>0.1%–5% of capital, including planned transaction costs.</small></label><label>Manual scanner universe<select value={preferences.universe} onChange={e => setPreferences(p => ({ ...p, universe: Number(e.target.value) }))}><option value="20">20 liquid assets</option><option value="30">30 liquid assets</option><option value="40">40 liquid assets</option><option value="50">50 liquid assets</option></select><small>Automatic ranking uses Binance USDT spot volume.</small></label><label className="checkbox-label"><input type="checkbox" checked={preferences.useWatchlist} onChange={e => setPreferences(p => ({ ...p, useWatchlist: e.target.checked }))} /><span>Scan my watchlist during manual scans<small>{watchlist.length} saved assets. Empty watchlists use the automatic universe.</small></span></label><label className="checkbox-label"><input type="checkbox" checked={preferences.largeText} onChange={e => setPreferences(p => ({ ...p, largeText: e.target.checked }))} /><span>Extra-large interface text<small>Increase interface type for easier reading.</small></span></label></div><div className="settings-info"><ShieldCheck size={23} /><div><strong>Transparent by default</strong><p>Persistent publisher: {data.persistence}. Recommendation scans run from GitHub Actions every {SCAN_CADENCE}. Live prices refresh every 30 seconds and closed candles every minute while this page is visible. The terminal never requests an exchange key and has no real order endpoint. The optional Grok CLI only narrates already calculated qualified plans.</p><a href="https://github.com/fareza777/website-intel-x" target="_blank" rel="noreferrer">View source & deployment guide <ArrowUpRight size={15} /></a></div></div></section>}
+          {view === "settings" && <section className="panel settings-panel"><div className="panel-heading"><h2>Research preferences</h2><span className="micro-tag">SAVED ON THIS DEVICE</span></div><div className="settings-fields"><label>Research capital (USDT)<input type="number" value={preferences.capital} min="100" max="1000000000" onChange={e => setPreferences(p => ({ ...p, capital: Number(e.target.value) }))} /><small>Used for research position sizing. Virtual portfolio cash is tracked separately.</small></label><label>Risk per trade (%)<input type="number" value={preferences.risk} min="0.1" max="5" step="0.1" onChange={e => setPreferences(p => ({ ...p, risk: Number(e.target.value) }))} /><small>0.1%–5% of capital, including planned transaction costs.</small></label><label>Manual scanner universe<select value={preferences.universe} onChange={e => setPreferences(p => ({ ...p, universe: Number(e.target.value) }))}><option value="20">20 liquid assets</option><option value="30">30 liquid assets</option><option value="40">40 liquid assets</option><option value="50">50 liquid assets</option></select><small>Automatic ranking uses Binance USDT spot volume.</small></label><label className="checkbox-label"><input type="checkbox" checked={preferences.useWatchlist} onChange={e => setPreferences(p => ({ ...p, useWatchlist: e.target.checked }))} /><span>Scan my watchlist during manual scans<small>{watchlist.length} saved assets. Empty watchlists use the automatic universe.</small></span></label><label className="checkbox-label"><input type="checkbox" checked={preferences.largeText} onChange={e => setPreferences(p => ({ ...p, largeText: e.target.checked }))} /><span>Extra-large interface text<small>Increase interface type for easier reading.</small></span></label></div><div className="settings-info"><ShieldCheck size={23} /><div><strong>Transparent by default</strong><p>Persistent publisher: {data.persistence}. Recommendation scans run from GitHub Actions every {SCAN_CADENCE}. Live prices refresh every 30 seconds and closed candles every 5 minutes while this page is visible. The terminal never requests an exchange key and has no real order endpoint. The optional Grok CLI only narrates already calculated qualified plans.</p><a href="https://github.com/fareza777/website-intel-x" target="_blank" rel="noreferrer">View source & deployment guide <ArrowUpRight size={15} /></a></div></div></section>}
         </>}
         <footer className="main-footer"><span><ShieldCheck size={15} />Research with discipline. Spot only. No leverage. No real orders.</span><span>CryptoScanora <span className="footer-separator">/</span> Independent of AI</span></footer>
       </main>

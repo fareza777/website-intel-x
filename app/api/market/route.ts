@@ -8,5 +8,15 @@ export async function GET() {
   const full = state.snapshot || await cachedScan();
   // `setups` duplicates the 1H horizon view; the client reads timeframes and only falls back to setups for old states.
   const snapshot = full.timeframes?.["1h"] ? { ...full, setups: [] } : full;
-  return NextResponse.json({ snapshot, signals: state.signals, alerts: state.alerts, analytics: state.analytics, scannerValidation: state.scannerValidation ?? null, persistence, preview: !state.snapshot, stale: isStale(full.generatedAt) }, { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" } });
+  // Historical signals and strategy reports are intentionally loaded by their pages.
+  // Keeping them out of this frequently refreshed response prevents a multi-megabyte
+  // research ledger from being transferred every time the terminal checks the market.
+  return NextResponse.json({
+    snapshot,
+    alerts: state.alerts,
+    publishedAt: state.updatedAt,
+    persistence,
+    preview: !state.snapshot,
+    stale: isStale(full.generatedAt),
+  }, { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } });
 }

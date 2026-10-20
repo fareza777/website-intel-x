@@ -64,7 +64,7 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
       if (inFlight || controller.signal.aborted) return;
       inFlight = true;
       try {
-        const response = await fetch(`/api/candles?symbol=${setup.symbol}&interval=${timeframe}&limit=500`, { signal: controller.signal, cache: "no-store" });
+        const response = await fetch(`/api/candles?symbol=${setup.symbol}&interval=${timeframe}&limit=320`, { signal: controller.signal, cache: "default" });
         const data = await response.json();
         if (!response.ok || !data.candles?.length) throw new Error(data.error || "Closed candle data is unavailable.");
         if (controller.signal.aborted) return;
@@ -200,7 +200,7 @@ export function MarketChart({ setup, timeframe, refresh }: { setup: MarketSetup;
     </div>
     <div className="chart-navigation-bar"><div className="chart-ranges">{[50, 100, 200, "all"].map(count => <button key={count} onClick={() => range(count as number | "all")}>{count === "all" ? "All" : `${count} bars`}</button>)}</div><div className="chart-zoom"><button aria-label="Zoom out chart" onClick={() => zoom(1.3)}><Minus size={18} /></button><button aria-label="Zoom in chart" onClick={() => zoom(.75)}><Plus size={18} /></button><button aria-label="Reset chart view" onClick={() => range(90)}><RotateCcw size={17} /></button></div></div>
     <div className="study-readout">{config.ema && <span>EMA {config.emaFast} <b>{studyPrice(studies.emaFast[index])}</b> · {config.emaSlow} <b>{studyPrice(studies.emaSlow[index])}</b> · {config.emaLong} <b>{studyPrice(studies.emaLong[index])}</b></span>}{config.rsi && <span>RSI {config.rsiPeriod} <b>{studies.rsi[index]?.toFixed(2) ?? "—"}</b></span>}{config.macd && <span>MACD <b>{studyPrice(studies.macdLine[index])}</b> · signal <b>{studyPrice(studies.macdSignal[index])}</b></span>}{config.atr && <span>ATR {config.atrPeriod} <b>{studyPrice(studies.atr[index])}</b></span>}{config.vwap && <span>UTC VWAP <b>{studyPrice(studies.vwap[index])}</b></span>}</div>
-    <p className={cn("chart-refresh-note", (error || stale) && "unavailable")}>{error ? "Refresh failed · showing the last received history" : stale ? "Candle history is stale" : "Closed candles · refreshed every minute"}{last && ` · Latest close ${new Date(last.closeTime).toLocaleString("en-US")}`}</p>
+    <p className={cn("chart-refresh-note", (error || stale) && "unavailable")}>{error ? "Refresh failed · showing the last received history" : stale ? "Candle history is stale" : "Closed candles · refreshed every 5 minutes"}{last && ` · Latest close ${new Date(last.closeTime).toLocaleString("en-US")}`}</p>
     <p className="chart-instruction">Hover or tap a candle for its percentage change. Drag to pan; scroll or pinch to zoom. Select Measure to drag a price range or choose two points. Chart studies use the displayed history; recommendation scores remain frozen at the scan.</p>
     {config.scale === "percent" && <p className="chart-refresh-note">Percentage scale uses the first visible value as 0% and follows pan/zoom. The ruler still measures raw prices. Use price or log scale to compare absolute levels.</p>}
   </div>;
