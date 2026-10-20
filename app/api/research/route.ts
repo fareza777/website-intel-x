@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { readPublishedState } from "@/lib/storage";
+import { compactResponse } from "@/lib/payload";
 
 export const maxDuration = 30;
 
@@ -19,7 +20,5 @@ export async function GET(request: Request) {
     ? { signals: state.signals }
     : { analytics: state.analytics, scannerValidation: state.scannerValidation ?? null };
 
-  return NextResponse.json({ ...payload, publishedAt: state.updatedAt, persistence }, {
-    headers: { "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1800" },
-  });
+  return compactResponse({ ...payload, publishedAt: state.updatedAt, persistence }, "public, s-maxage=600, stale-while-revalidate=1800");
 }

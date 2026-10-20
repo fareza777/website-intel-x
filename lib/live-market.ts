@@ -1,13 +1,37 @@
-import type { SpotQuote } from "./types";
+import type { SpotQuote, Timeframe } from "./types";
 
 export const SCAN_INTERVAL_HOURS = 1;
 export const SCAN_CADENCE = SCAN_INTERVAL_HOURS === 1 ? "hour" : `${SCAN_INTERVAL_HOURS} hours`;
 export const SCAN_MINUTE = 17;
 export const QUOTE_REFRESH_MS = 30_000;
-// Closed candles cannot change until the current interval finishes. Polling every
-// five minutes is enough for all supported horizons and avoids repeated origin
-// transfers while a chart remains open.
-export const CANDLE_REFRESH_MS = 300_000;
+export const CANDLE_RETRY_MS = 30_000;
+const CANDLE_MS: Record<Timeframe, number> = { "15m": 900_000, "1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000 };
+const CANDLE_GRACE_MS = 10_000;
+
+/** Close time of the most recent finished candle (Binance closeTime = next open - 1ms). */
+export function latestClosedCandleTime(timeframe: Timeframe, now: number): number {
+  const duration = CANDLE_MS[timeframe];
+  return Math.floor(now / duration) * duration - 1;
+}
+
+/**
+ * Closed candles only change when an interval ends, so the chart refreshes just after
+ * the next close instead of polling. While the exchange has not published the newest
+ * closed candle yet it retries quickly, and backs off if the market looks halted.
+ */
+export function nextCandleRefreshMs(timeframe: Timeframe, lastCloseTime: number | null, now: number): number {
+  const expected = latestClosedCandleTime(timeframe, now);
+  if (lastCloseTime === null) return CANDLE_RETRY_MS * 2;
+  if (lastCloseTime < expected) return now - expected < 300_000 ? CANDLE_RETRY_MS : 300_000;
+  return Math.max(CANDLE_RETRY_MS, expected + 1 + CANDLE_MS[timeframe] - now + CANDLE_GRACE_MS);
+}
+
+/** CDN lifetime for a closed-candle response: until the next close, or briefly while the newest candle is missing. */
+export function candleCacheSeconds(timeframe: Timeframe, lastCloseTime: number | null, now: number): number {
+  const expected = latestClosedCandleTime(timeframe, now);
+  if (lastCloseTime === null || lastCloseTime < expected) return 15;
+  return Math.min(3600, Math.max(15, Math.ceil((expected + 1 + CANDLE_MS[timeframe] - now) / 1000) + 5));
+}
 
 /** Missing or aged quotes are never replaced with a research candle price. */
 export function freshQuotePrice(quote: SpotQuote | undefined, symbol: string, now: number): number | null {

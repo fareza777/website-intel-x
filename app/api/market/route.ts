@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { compactResponse } from "@/lib/payload";
 import { readPublishedState } from "@/lib/storage";
 import { cachedScan } from "@/lib/server-market";
 import { isStale } from "@/lib/utils";
@@ -11,12 +11,12 @@ export async function GET() {
   // Historical signals and strategy reports are intentionally loaded by their pages.
   // Keeping them out of this frequently refreshed response prevents a multi-megabyte
   // research ledger from being transferred every time the terminal checks the market.
-  return NextResponse.json({
+  return compactResponse({
     snapshot,
     alerts: state.alerts,
     publishedAt: state.updatedAt,
     persistence,
     preview: !state.snapshot,
     stale: isStale(full.generatedAt),
-  }, { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } });
+  }, "public, s-maxage=300, stale-while-revalidate=600");
 }

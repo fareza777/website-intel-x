@@ -3,5 +3,5 @@
   "framework": "nextjs",
   "regions": ["sin1"],
   "functions": { "app/api/**/route.ts": { "maxDuration": 60 } },
-  "git": { "deploymentEnabled": { "market-data": false } }
+  "git": { "deploymentEnabled": { "market-data": false, "claude/**": false } }
 }

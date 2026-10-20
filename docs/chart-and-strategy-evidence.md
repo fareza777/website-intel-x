@@ -4,7 +4,7 @@
 
 The contextual **Panduan halaman** button opens Indonesian explanations for the current page. **Panduan terminal** also includes Chart Studio, the precise strategy rules, a glossary, and primary source links. Chart settings change the chart only; they do not rewrite frozen research or change the scanner rules.
 
-Chart Studio supports candlesticks, line and area, price/log/percentage axes, grid and magnet crosshair, resizable synchronized volume/RSI/MACD/ATR panes, EMA/SMA/Bollinger/session VWAP/prior Donchian overlays, original entry/stop/targets and confirmed structure markers. Presets and validated period settings are saved locally. Invalid stored settings fall back to defaults. Chart data refreshes every minute while visible, with an explicit last closed-candle timestamp and a retained-history warning after failed refreshes.
+Chart Studio supports candlesticks, line and area, price/log/percentage axes, grid and magnet crosshair, resizable synchronized volume/RSI/MACD/ATR panes, EMA/SMA/Bollinger/session VWAP/prior Donchian overlays, original entry/stop/targets and confirmed structure markers. Presets and validated period settings are saved locally. Invalid stored settings fall back to defaults. Chart data refreshes right after each candle closes while visible, with an explicit last closed-candle timestamp and a retained-history warning after failed refreshes.
 
 Hover, tap, or previous/next candle controls show exact OHLC/base volume and three distinct measurements:
 
